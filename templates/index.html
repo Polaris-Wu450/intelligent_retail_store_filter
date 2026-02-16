@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intelligent Retail Store Filter - Action Plan Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 40px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .tab-button {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            width: auto;
+        }
+        
+        .tab-button.active {
+            background: white;
+            color: #667eea;
+        }
+        
+        .tab-button:hover {
+            transform: translateY(-2px);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            display: none;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .search-box {
+            margin-bottom: 20px;
+        }
+        
+        .search-input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        
+        .plans-list {
+            display: grid;
+            gap: 20px;
+        }
+        
+        .plan-item {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .plan-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .plan-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 15px;
+        }
+        
+        .plan-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .plan-meta {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        
+        .plan-description {
+            color: #555;
+            margin-bottom: 15px;
+            line-height: 1.5;
+        }
+        
+        .plan-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .btn-small {
+            padding: 8px 16px;
+            font-size: 14px;
+            width: auto;
+            border-radius: 6px;
+        }
+        
+        .btn-view {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .btn-download {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-pending { background: #fef3c7; color: #92400e; }
+        .status-processing { background: #dbeafe; color: #1e40af; }
+        .status-completed { background: #d1fae5; color: #065f46; }
+        .status-failed { background: #fee2e2; color: #991b1b; }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            overflow-y: auto;
+            padding: 40px 20px;
+        }
+        
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 800px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #667eea;
+        }
+        
+        .modal-title {
+            font-size: 24px;
+            color: #333;
+            font-weight: 600;
+        }
+        
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 28px;
+            cursor: pointer;
+            color: #666;
+            width: auto;
+            padding: 0;
+            line-height: 1;
+        }
+        
+        .close-btn:hover {
+            color: #333;
+            transform: none;
+        }
+        
+        .result-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .result-info p {
+            margin-bottom: 8px;
+            color: #555;
+        }
+        
+        .result-info strong {
+            color: #333;
+        }
+        
+        .plan-content {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            margin-top: 15px;
+        }
+        
+        .error-message {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+        
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏪 Retail Action Plan Generator</h1>
+        
+        <div class="tabs">
+            <button class="tab-button active" onclick="switchTab('create')">Create New Plan</button>
+            <button class="tab-button" onclick="switchTab('search')">Search & Browse Plans</button>
+        </div>
+        
+        <!-- Create Tab -->
+        <div id="createTab" class="tab-content active">
+            <div class="card">
+                <form id="actionPlanForm">
+                    <div class="form-group">
+                        <label for="storeName">Store Name</label>
+                        <input type="text" id="storeName" name="store_name" required 
+                               placeholder="e.g., Downtown Store #42">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="storeLocation">Store Location</label>
+                        <input type="text" id="storeLocation" name="store_location" required 
+                               placeholder="e.g., 123 Main St, San Francisco, CA">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="issueDescription">Issue Description</label>
+                        <textarea id="issueDescription" name="issue_description" required 
+                                  placeholder="Describe the issue or challenge at this store..."></textarea>
+                    </div>
+                    
+                    <button type="submit">Generate Action Plan</button>
+                </form>
+                
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p>Generating your action plan... Please wait.</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Search Tab -->
+        <div id="searchTab" class="tab-content">
+            <div class="card">
+                <div class="search-box">
+                    <input type="text" id="searchInput" class="search-input" 
+                           placeholder="Search by store name, location, or issue description...">
+                </div>
+                
+                <div id="plansList" class="plans-list"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Detail Modal -->
+    <div id="detailModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Action Plan Details</h2>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            
+            <div class="result-info">
+                <p><strong>Store:</strong> <span id="modalStoreName"></span></p>
+                <p><strong>Location:</strong> <span id="modalStoreLocation"></span></p>
+                <p><strong>Issue:</strong> <span id="modalIssueDescription"></span></p>
+                <p><strong>Status:</strong> <span class="status-badge" id="modalStatus"></span></p>
+                <p><strong>Created:</strong> <span id="modalCreatedAt"></span></p>
+            </div>
+            
+            <div id="modalPlanWrapper">
+                <h3 style="margin-bottom: 15px; color: #333;">📋 Action Plan:</h3>
+                <div class="plan-content" id="modalPlanContent"></div>
+                <button class="btn-download" style="margin-top: 20px;" onclick="downloadCurrentPlan()">
+                    Download Action Plan
+                </button>
+            </div>
+            
+            <div class="error-message" id="modalErrorMessage" style="display: none;"></div>
+        </div>
+    </div>
+    
+    <script>
+        let allPlans = [];
+        let currentPlan = null;
+        
+        // Tab switching
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            if (tab === 'create') {
+                document.querySelector('.tab-button:nth-child(1)').classList.add('active');
+                document.getElementById('createTab').classList.add('active');
+            } else {
+                document.querySelector('.tab-button:nth-child(2)').classList.add('active');
+                document.getElementById('searchTab').classList.add('active');
+                loadAllPlans();
+            }
+        }
+        
+        // Form submission
+        const form = document.getElementById('actionPlanForm');
+        const loading = document.getElementById('loading');
+        
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(form);
+            const data = {
+                store_name: formData.get('store_name'),
+                store_location: formData.get('store_location'),
+                issue_description: formData.get('issue_description')
+            };
+            
+            form.style.display = 'none';
+            loading.style.display = 'block';
+            
+            try {
+                const response = await fetch('/api/action-plans/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                form.reset();
+                form.style.display = 'block';
+                loading.style.display = 'none';
+                
+                currentPlan = result;
+                openModal(result);
+                
+            } catch (error) {
+                alert('Error: ' + error.message);
+                form.style.display = 'block';
+                loading.style.display = 'none';
+            }
+        });
+        
+        // Load all plans
+        async function loadAllPlans() {
+            try {
+                const response = await fetch('/api/action-plans/list/');
+                const data = await response.json();
+                allPlans = data.action_plans;
+                displayPlans(allPlans);
+            } catch (error) {
+                console.error('Error loading plans:', error);
+            }
+        }
+        
+        // Display plans list
+        function displayPlans(plans) {
+            const plansList = document.getElementById('plansList');
+            
+            if (plans.length === 0) {
+                plansList.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📋</div>
+                        <h3>No action plans found</h3>
+                        <p>Create your first action plan to get started!</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            plansList.innerHTML = plans.map(plan => `
+                <div class="plan-item">
+                    <div class="plan-header">
+                        <div>
+                            <div class="plan-title">${escapeHtml(plan.store_name)}</div>
+                            <div class="plan-meta">
+                                ${escapeHtml(plan.store_location)} • 
+                                ${formatDate(plan.created_at)}
+                            </div>
+                        </div>
+                        <span class="status-badge status-${plan.status}">${plan.status}</span>
+                    </div>
+                    <div class="plan-description">${escapeHtml(plan.issue_description)}</div>
+                    <div class="plan-actions">
+                        <button class="btn-small btn-view" onclick="viewPlan(${plan.id})">
+                            View Details
+                        </button>
+                        ${plan.status === 'completed' ? `
+                            <button class="btn-small btn-download" onclick="downloadPlan(${plan.id})">
+                                Download
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        // Search functionality
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            const filteredPlans = allPlans.filter(plan => 
+                plan.store_name.toLowerCase().includes(searchTerm) ||
+                plan.store_location.toLowerCase().includes(searchTerm) ||
+                plan.issue_description.toLowerCase().includes(searchTerm)
+            );
+            displayPlans(filteredPlans);
+        });
+        
+        // View plan details
+        async function viewPlan(planId) {
+            try {
+                const response = await fetch(`/api/action-plans/${planId}/`);
+                const plan = await response.json();
+                currentPlan = plan;
+                openModal(plan);
+            } catch (error) {
+                alert('Error loading plan: ' + error.message);
+            }
+        }
+        
+        // Open modal
+        function openModal(plan) {
+            document.getElementById('modalStoreName').textContent = plan.store_name;
+            document.getElementById('modalStoreLocation').textContent = plan.store_location;
+            document.getElementById('modalIssueDescription').textContent = plan.issue_description;
+            document.getElementById('modalCreatedAt').textContent = formatDate(plan.created_at);
+            
+            const statusBadge = document.getElementById('modalStatus');
+            statusBadge.textContent = plan.status;
+            statusBadge.className = 'status-badge status-' + plan.status;
+            
+            const planWrapper = document.getElementById('modalPlanWrapper');
+            const errorMessage = document.getElementById('modalErrorMessage');
+            
+            if (plan.status === 'completed' && plan.plan_content) {
+                planWrapper.style.display = 'block';
+                errorMessage.style.display = 'none';
+                document.getElementById('modalPlanContent').textContent = plan.plan_content;
+            } else if (plan.status === 'failed') {
+                planWrapper.style.display = 'none';
+                errorMessage.style.display = 'block';
+                errorMessage.textContent = 'Error: ' + (plan.error_message || 'Failed to generate action plan');
+            } else {
+                planWrapper.style.display = 'none';
+                errorMessage.style.display = 'none';
+            }
+            
+            document.getElementById('detailModal').classList.add('active');
+        }
+        
+        // Close modal
+        function closeModal() {
+            document.getElementById('detailModal').classList.remove('active');
+        }
+        
+        // Download current plan in modal
+        function downloadCurrentPlan() {
+            if (currentPlan && currentPlan.status === 'completed') {
+                downloadPlan(currentPlan.id);
+            }
+        }
+        
+        // Download plan as text file
+        async function downloadPlan(planId) {
+            try {
+                const response = await fetch(`/api/action-plans/${planId}/`);
+                const plan = await response.json();
+                
+                if (plan.status !== 'completed' || !plan.plan_content) {
+                    alert('Plan is not ready for download');
+                    return;
+                }
+                
+                const content = `
+RETAIL ACTION PLAN
+==================
+
+Store: ${plan.store_name}
+Location: ${plan.store_location}
+Created: ${formatDate(plan.created_at)}
+Status: ${plan.status}
+
+ISSUE DESCRIPTION
+-----------------
+${plan.issue_description}
+
+ACTION PLAN
+-----------
+${plan.plan_content}
+
+---
+Generated by Intelligent Retail Store Filter
+                `.trim();
+                
+                const blob = new Blob([content], { type: 'text/plain' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `action-plan-${plan.id}-${plan.store_name.replace(/\s+/g, '-')}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+            } catch (error) {
+                alert('Error downloading plan: ' + error.message);
+            }
+        }
+        
+        // Utility functions
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+        
+        // Close modal on outside click
+        document.getElementById('detailModal').addEventListener('click', (e) => {
+            if (e.target.id === 'detailModal') {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>
