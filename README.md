@@ -6,7 +6,7 @@ RetailOps AI is a production-ready B2B platform designed for large-scale retail 
 
 - **Customer**: Regional Managers and Operations Teams.
 - **Problem**: Manual processing of customer feedback, identifying category-specific issues (e.g., sofas, beds), and creating actionable improvement plans takes 20-40 minutes per entry. High volumes lead to backlogs and missed SLAs.
-- **Solution**: A web application that automates data entry, performs strict integrity checks, and uses LLMs to generate "Action Plans" (similar to medical Care Plans) to improve store performance and compliance.
+- **Solution**: A web application that automates data entry, performs strict integrity checks, and uses LLMs to generate "Action Plans" to improve store performance and compliance.
 
 ## 2. Key Features
 
