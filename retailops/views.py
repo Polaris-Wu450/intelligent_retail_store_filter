@@ -10,11 +10,15 @@ import anthropic
 @csrf_exempt
 @require_http_methods(["POST"])
 def create_action_plan(request):
+    # 🔍 BREAKPOINT 1: Function entry - inspect the raw incoming request
     data = json.loads(request.body)
+    
+    # 🔍 BREAKPOINT 2: After parsing - check the parsed JSON data
     store_name = data.get('store_name')
     store_location = data.get('store_location')
     issue_description = data.get('issue_description')
     
+    # 🔍 BREAKPOINT 3: Database creation - see the newly created ActionPlan object
     action_plan = ActionPlan.objects.create(
         store_name=store_name,
         store_location=store_location,
@@ -22,12 +26,15 @@ def create_action_plan(request):
         status='pending'
     )
     
+    # 🔍 BREAKPOINT 4: Status update - confirm status changed to 'processing'
     action_plan.status = 'processing'
     action_plan.save()
     
     try:
+        # 🔍 BREAKPOINT 5: LLM client initialization - verify API key is loaded
         client = anthropic.Anthropic(api_key=settings.RETAILOPS_API_KEY)
         
+        # 🔍 BREAKPOINT 6: Prompt preparation - inspect the full prompt sent to LLM
         prompt = f"""You are a retail operations assistant helping B2B managers. Generate a CONCISE, actionable plan for this store issue.
 
 Store Name: {store_name}
@@ -43,6 +50,7 @@ Requirements:
 
 Generate a short, practical action plan now:"""
         
+        # 🔍 BREAKPOINT 7: LLM API call - this will take a few seconds to complete
         message = client.messages.create(
             model="claude-sonnet-4-5-20250929",
             max_tokens=800,
@@ -51,17 +59,21 @@ Generate a short, practical action plan now:"""
             ]
         )
         
+        # 🔍 BREAKPOINT 8: LLM response - inspect the AI-generated content
         plan_content = message.content[0].text
         
+        # 🔍 BREAKPOINT 9: Saving to database - verify data is correctly saved
         action_plan.status = 'completed'
         action_plan.plan_content = plan_content
         action_plan.save()
         
     except Exception as e:
+        # 🔍 BREAKPOINT 10: Error handling - catch LLM API failures here
         action_plan.status = 'failed'
         action_plan.error_message = str(e)
         action_plan.save()
     
+    # 🔍 BREAKPOINT 11: Before response - inspect the final data returned to frontend
     return JsonResponse({
         'id': action_plan.id,
         'store_name': action_plan.store_name,
