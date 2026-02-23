@@ -1,0 +1,121 @@
+{
+  "info": {
+    "name": "Retail Action Plan API",
+    "description": "API collection for testing the Retail Action Plan Generator",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Create Action Plan",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"store_name\": \"Downtown Store #42\",\n  \"store_location\": \"123 Main St, San Francisco, CA\",\n  \"issue_description\": \"Customer satisfaction scores have dropped 15% in the last quarter. Staff morale is low and inventory management needs improvement.\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/api/action-plans/",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8000",
+          "path": ["api", "action-plans", ""]
+        },
+        "description": "Creates a new action plan and generates recommendations using Claude AI"
+      },
+      "response": []
+    },
+    {
+      "name": "Get Action Plan by ID",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8000/api/action-plans/1/",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8000",
+          "path": ["api", "action-plans", "1", ""]
+        },
+        "description": "Retrieves a specific action plan by its ID"
+      },
+      "response": []
+    },
+    {
+      "name": "List All Action Plans",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8000/api/action-plans/list/",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8000",
+          "path": ["api", "action-plans", "list", ""]
+        },
+        "description": "Retrieves all action plans"
+      },
+      "response": []
+    },
+    {
+      "name": "Create Action Plan - Short Issue",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"store_name\": \"Northside Mall Store\",\n  \"store_location\": \"456 Oak Avenue, Seattle, WA\",\n  \"issue_description\": \"Long checkout wait times during peak hours\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/api/action-plans/",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8000",
+          "path": ["api", "action-plans", ""]
+        },
+        "description": "Test with a simpler, shorter issue description"
+      },
+      "response": []
+    },
+    {
+      "name": "Create Action Plan - Complex Issue",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"store_name\": \"Westside Premium Outlet\",\n  \"store_location\": \"789 Commerce Blvd, Los Angeles, CA\",\n  \"issue_description\": \"Multiple challenges: 1) High employee turnover (30% in last 6 months), 2) Declining foot traffic (down 20% YoY), 3) Inventory shrinkage issues, 4) Poor online review scores (2.8/5 stars), 5) Outdated store layout not optimized for current product mix\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/api/action-plans/",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8000",
+          "path": ["api", "action-plans", ""]
+        },
+        "description": "Test with a complex, multi-faceted issue"
+      },
+      "response": []
+    }
+  ]
+}
+
+
