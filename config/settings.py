@@ -61,3 +61,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 RETAILOPS_API_KEY = os.getenv('RETAILOPS_API_KEY', '')
 
+REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+REDIS_QUEUE_NAME = 'actionplan_queue'
+
