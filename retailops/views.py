@@ -1,20 +1,19 @@
 import json
-import redis
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from django.conf import settings
 from .models import ActionPlan
+from .tasks import generate_action_plan
 
 
 @csrf_exempt
 @require_http_methods(["POST"])
 def create_action_plan(request):
     """
-    Async processing approach:
+    Async processing with Celery:
     1. Receive request and parse data
     2. Create ActionPlan record with status='pending'
-    3. Push actionplan_id to Redis queue
+    3. Dispatch Celery task to generate action plan
     4. Return immediately without waiting for LLM processing
     """
     data = json.loads(request.body)
@@ -30,17 +29,7 @@ def create_action_plan(request):
         status='pending'
     )
     
-    try:
-        redis_client = redis.from_url(settings.REDIS_URL)
-        redis_client.rpush(settings.REDIS_QUEUE_NAME, action_plan.id)
-    except Exception as e:
-        action_plan.status = 'failed'
-        action_plan.error_message = f'Redis connection error: {str(e)}'
-        action_plan.save()
-        return JsonResponse({
-            'error': 'Failed to queue task',
-            'details': str(e)
-        }, status=500)
+    generate_action_plan.delay(action_plan.id)
     
     return JsonResponse({
         'id': action_plan.id,
