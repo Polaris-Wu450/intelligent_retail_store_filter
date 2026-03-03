@@ -62,6 +62,32 @@ def get_action_plan(request, plan_id):
 
 
 @require_http_methods(["GET"])
+def get_action_plan_status(request, plan_id):
+    """
+    Lightweight endpoint for polling task status.
+    Returns only essential fields to minimize data transfer.
+    """
+    try:
+        action_plan = ActionPlan.objects.get(id=plan_id)
+        response_data = {
+            'id': action_plan.id,
+            'status': action_plan.status,
+        }
+        
+        # Only include content when completed
+        if action_plan.status == 'completed':
+            response_data['plan_content'] = action_plan.plan_content
+        
+        # Only include error when failed
+        if action_plan.status == 'failed':
+            response_data['error_message'] = action_plan.error_message
+        
+        return JsonResponse(response_data)
+    except ActionPlan.DoesNotExist:
+        return JsonResponse({'error': 'Action plan not found'}, status=404)
+
+
+@require_http_methods(["GET"])
 def list_action_plans(request):
     action_plans = ActionPlan.objects.all()
     data = [{

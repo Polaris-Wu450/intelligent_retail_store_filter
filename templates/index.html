@@ -431,6 +431,14 @@
     <script>
         let allPlans = [];
         let currentPlan = null;
+        let pollingTimeout = null;
+        
+        // Polling configuration
+        const POLLING_CONFIG = {
+            delays: [1000, 2000, 3000, 5000],  // Exponential backoff: 1s, 2s, 3s, then 5s
+            maxDelay: 5000,                     // Max interval 5 seconds
+            maxAttempts: 30,                    // Max 30 attempts (~2.5 minutes)
+        };
         
         // Tab switching
         function switchTab(tab) {
@@ -447,12 +455,129 @@
             }
         }
         
+        // Poll task status with exponential backoff
+        async function pollTaskStatus(planId, attempt = 0) {
+            try {
+                // Check if max attempts reached
+                if (attempt >= POLLING_CONFIG.maxAttempts) {
+                    throw new Error('Polling timeout - task took too long');
+                }
+                
+                // Fetch status
+                const response = await fetch(`/api/action-plans/${planId}/status/`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                // Update modal status badge
+                const statusBadge = document.getElementById('modalStatus');
+                if (statusBadge) {
+                    statusBadge.textContent = data.status;
+                    statusBadge.className = 'status-badge status-' + data.status;
+                }
+                
+                // Check if task is done
+                if (data.status === 'completed') {
+                    // Fetch full plan details
+                    const fullResponse = await fetch(`/api/action-plans/${planId}/`);
+                    const fullPlan = await fullResponse.json();
+                    currentPlan = fullPlan;
+                    
+                    // Update modal with completed content
+                    displayCompletedPlan(fullPlan);
+                    
+                    // Hide loading, show success message
+                    const loading = document.getElementById('loading');
+                    loading.innerHTML = '<p style="color: #10b981; font-weight: 600;">✅ Action plan generated successfully!</p>';
+                    
+                    return fullPlan;
+                }
+                
+                if (data.status === 'failed') {
+                    // Display error
+                    displayFailedPlan(data);
+                    
+                    // Hide loading, show error
+                    const loading = document.getElementById('loading');
+                    loading.innerHTML = '<p style="color: #dc2626; font-weight: 600;">❌ Failed to generate action plan</p>';
+                    
+                    throw new Error(data.error_message || 'Task failed');
+                }
+                
+                // Task still processing - schedule next poll
+                const delay = POLLING_CONFIG.delays[Math.min(attempt, POLLING_CONFIG.delays.length - 1)];
+                
+                pollingTimeout = setTimeout(() => {
+                    pollTaskStatus(planId, attempt + 1);
+                }, delay);
+                
+            } catch (error) {
+                console.error('Polling error:', error);
+                
+                const loading = document.getElementById('loading');
+                loading.style.display = 'none';
+                
+                alert('Error: ' + error.message);
+                
+                // Re-enable form
+                const form = document.getElementById('actionPlanForm');
+                form.style.display = 'block';
+            }
+        }
+        
+        // Display completed plan in modal
+        function displayCompletedPlan(plan) {
+            const planWrapper = document.getElementById('modalPlanWrapper');
+            const errorMessage = document.getElementById('modalErrorMessage');
+            const processingMsg = document.getElementById('processingMessage');
+            
+            // Hide processing message
+            if (processingMsg) {
+                processingMsg.style.display = 'none';
+            }
+            
+            // Show completed plan
+            planWrapper.style.display = 'block';
+            errorMessage.style.display = 'none';
+            
+            document.getElementById('modalPlanContent').textContent = plan.plan_content;
+            document.getElementById('modalStoreName').textContent = plan.store_name;
+            document.getElementById('modalStoreLocation').textContent = plan.store_location;
+            document.getElementById('modalIssueDescription').textContent = plan.issue_description;
+            document.getElementById('modalCreatedAt').textContent = formatDate(plan.created_at);
+        }
+        
+        // Display failed plan in modal
+        function displayFailedPlan(data) {
+            const planWrapper = document.getElementById('modalPlanWrapper');
+            const errorMessage = document.getElementById('modalErrorMessage');
+            const processingMsg = document.getElementById('processingMessage');
+            
+            // Hide processing message
+            if (processingMsg) {
+                processingMsg.style.display = 'none';
+            }
+            
+            // Show error
+            planWrapper.style.display = 'none';
+            errorMessage.style.display = 'block';
+            errorMessage.textContent = 'Error: ' + (data.error_message || 'Failed to generate action plan');
+        }
+        
         // Form submission
         const form = document.getElementById('actionPlanForm');
         const loading = document.getElementById('loading');
         
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
+            
+            // Clear any existing polling
+            if (pollingTimeout) {
+                clearTimeout(pollingTimeout);
+                pollingTimeout = null;
+            }
             
             const formData = new FormData(form);
             const data = {
@@ -463,8 +588,10 @@
             
             form.style.display = 'none';
             loading.style.display = 'block';
+            loading.innerHTML = '<div class="spinner"></div><p>Generating your action plan... Please wait.</p>';
             
             try {
+                // Submit form
                 const response = await fetch('/api/action-plans/', {
                     method: 'POST',
                     headers: {
@@ -473,14 +600,23 @@
                     body: JSON.stringify(data)
                 });
                 
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const result = await response.json();
                 
+                // Reset form
                 form.reset();
-                form.style.display = 'block';
-                loading.style.display = 'none';
                 
+                // Store current plan
                 currentPlan = result;
+                
+                // Open modal immediately (showing pending/processing status)
                 openModal(result);
+                
+                // Start polling for status updates
+                pollTaskStatus(result.id);
                 
             } catch (error) {
                 alert('Error: ' + error.message);
@@ -561,6 +697,11 @@
                 const plan = await response.json();
                 currentPlan = plan;
                 openModal(plan);
+                
+                // If plan is still processing, start polling
+                if (plan.status === 'pending' || plan.status === 'processing') {
+                    pollTaskStatus(planId);
+                }
             } catch (error) {
                 alert('Error loading plan: ' + error.message);
             }
@@ -589,8 +730,20 @@
                 errorMessage.style.display = 'block';
                 errorMessage.textContent = 'Error: ' + (plan.error_message || 'Failed to generate action plan');
             } else {
+                // pending or processing - show a message
                 planWrapper.style.display = 'none';
                 errorMessage.style.display = 'none';
+                
+                // Add a processing message if not already present
+                let processingMsg = document.getElementById('processingMessage');
+                if (!processingMsg) {
+                    processingMsg = document.createElement('div');
+                    processingMsg.id = 'processingMessage';
+                    processingMsg.style.cssText = 'text-align: center; padding: 40px; color: #667eea;';
+                    errorMessage.parentNode.insertBefore(processingMsg, errorMessage);
+                }
+                processingMsg.innerHTML = '<div class="spinner" style="margin: 0 auto 20px;"></div><p style="font-size: 16px; font-weight: 600;">⏳ Generating action plan... This may take 10-30 seconds.</p>';
+                processingMsg.style.display = 'block';
             }
             
             document.getElementById('detailModal').classList.add('active');
@@ -599,6 +752,24 @@
         // Close modal
         function closeModal() {
             document.getElementById('detailModal').classList.remove('active');
+            
+            // Clear polling when modal is closed
+            if (pollingTimeout) {
+                clearTimeout(pollingTimeout);
+                pollingTimeout = null;
+            }
+            
+            // Hide processing message
+            const processingMsg = document.getElementById('processingMessage');
+            if (processingMsg) {
+                processingMsg.style.display = 'none';
+            }
+            
+            // Re-enable form if it was disabled
+            const form = document.getElementById('actionPlanForm');
+            const loading = document.getElementById('loading');
+            form.style.display = 'block';
+            loading.style.display = 'none';
         }
         
         // Download current plan in modal
