@@ -1,9 +1,13 @@
 import json
+import logging
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from .models import ActionPlan
-from .tasks import generate_action_plan
+from . import services
+from . import serializers
+
+logger = logging.getLogger(__name__)
 
 
 @csrf_exempt
@@ -16,47 +20,48 @@ def create_action_plan(request):
     3. Dispatch Celery task to generate action plan
     4. Return immediately without waiting for LLM processing
     """
+    logger.info("=" * 80)
+    logger.info("[VIEWS] 📥 Step 1: Request received at views.create_action_plan()")
+    logger.info(f"[VIEWS] HTTP Method: {request.method}")
+    logger.info(f"[VIEWS] Content-Type: {request.content_type}")
+    logger.info(f"[VIEWS] Raw request.body type: {type(request.body)}")
+    logger.info(f"[VIEWS] Raw request.body content: {request.body.decode('utf-8')[:200]}")
+    
     data = json.loads(request.body)
+    logger.info(f"[VIEWS] 📝 After json.loads() - data type: {type(data)}")
+    logger.info(f"[VIEWS] 📝 After json.loads() - data content: {data}")
     
-    store_name = data.get('store_name')
-    store_location = data.get('store_location')
-    issue_description = data.get('issue_description')
+    logger.info("[VIEWS] ➡️  Calling serializers.parse_create_action_plan_request()...")
+    parsed_data = serializers.parse_create_action_plan_request(data)
+    logger.info(f"[VIEWS] ⬅️  Returned from serializers - parsed_data type: {type(parsed_data)}")
+    logger.info(f"[VIEWS] ⬅️  Returned from serializers - parsed_data: {parsed_data}")
     
-    action_plan = ActionPlan.objects.create(
-        store_name=store_name,
-        store_location=store_location,
-        issue_description=issue_description,
-        status='pending'
-    )
+    logger.info("[VIEWS] ➡️  Calling services.create_action_plan()...")
+    action_plan = services.create_action_plan(**parsed_data)
+    logger.info(f"[VIEWS] ⬅️  Returned from services - action_plan type: {type(action_plan)}")
+    logger.info(f"[VIEWS] ⬅️  Returned from services - action_plan: {action_plan}")
+    logger.info(f"[VIEWS] ⬅️  ActionPlan ID: {action_plan.id}, Status: {action_plan.status}")
     
-    generate_action_plan.delay(action_plan.id)
+    logger.info("[VIEWS] ➡️  Calling services.dispatch_action_plan_task()...")
+    services.dispatch_action_plan_task(action_plan.id)
+    logger.info(f"[VIEWS] ⬅️  Task dispatched to Celery for plan_id: {action_plan.id}")
     
-    return JsonResponse({
-        'id': action_plan.id,
-        'store_name': action_plan.store_name,
-        'store_location': action_plan.store_location,
-        'issue_description': action_plan.issue_description,
-        'status': action_plan.status,
-        'message': 'Action plan request received and queued for processing',
-        'created_at': action_plan.created_at.isoformat(),
-    }, status=202)
+    logger.info("[VIEWS] ➡️  Calling serializers.serialize_action_plan_created()...")
+    response_data = serializers.serialize_action_plan_created(action_plan)
+    logger.info(f"[VIEWS] ⬅️  Returned from serializers - response_data type: {type(response_data)}")
+    logger.info(f"[VIEWS] ⬅️  Returned from serializers - response_data: {response_data}")
+    
+    logger.info(f"[VIEWS] 📤 Step 5: Returning JsonResponse with status=202")
+    logger.info("=" * 80)
+    return JsonResponse(response_data, status=202)
 
 
 @require_http_methods(["GET"])
 def get_action_plan(request, plan_id):
     try:
-        action_plan = ActionPlan.objects.get(id=plan_id)
-        return JsonResponse({
-            'id': action_plan.id,
-            'store_name': action_plan.store_name,
-            'store_location': action_plan.store_location,
-            'issue_description': action_plan.issue_description,
-            'status': action_plan.status,
-            'plan_content': action_plan.plan_content,
-            'error_message': action_plan.error_message,
-            'created_at': action_plan.created_at.isoformat(),
-            'updated_at': action_plan.updated_at.isoformat(),
-        })
+        action_plan = services.get_action_plan_by_id(plan_id)
+        response_data = serializers.serialize_action_plan_detail(action_plan)
+        return JsonResponse(response_data)
     except ActionPlan.DoesNotExist:
         return JsonResponse({'error': 'Action plan not found'}, status=404)
 
@@ -68,20 +73,8 @@ def get_action_plan_status(request, plan_id):
     Returns only essential fields to minimize data transfer.
     """
     try:
-        action_plan = ActionPlan.objects.get(id=plan_id)
-        response_data = {
-            'id': action_plan.id,
-            'status': action_plan.status,
-        }
-        
-        # Only include content when completed
-        if action_plan.status == 'completed':
-            response_data['plan_content'] = action_plan.plan_content
-        
-        # Only include error when failed
-        if action_plan.status == 'failed':
-            response_data['error_message'] = action_plan.error_message
-        
+        action_plan = services.get_action_plan_by_id(plan_id)
+        response_data = serializers.serialize_action_plan_status(action_plan)
         return JsonResponse(response_data)
     except ActionPlan.DoesNotExist:
         return JsonResponse({'error': 'Action plan not found'}, status=404)
@@ -89,18 +82,7 @@ def get_action_plan_status(request, plan_id):
 
 @require_http_methods(["GET"])
 def list_action_plans(request):
-    action_plans = ActionPlan.objects.all()
-    data = [{
-        'id': plan.id,
-        'store_name': plan.store_name,
-        'store_location': plan.store_location,
-        'issue_description': plan.issue_description,
-        'status': plan.status,
-        'plan_content': plan.plan_content,
-        'error_message': plan.error_message,
-        'created_at': plan.created_at.isoformat(),
-        'updated_at': plan.updated_at.isoformat(),
-    } for plan in action_plans]
-    
-    return JsonResponse({'action_plans': data})
+    action_plans = services.get_all_action_plans()
+    response_data = serializers.serialize_action_plan_list(action_plans)
+    return JsonResponse(response_data)
 
