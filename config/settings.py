@@ -18,6 +18,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'retailops.middleware.ExceptionHandlerMiddleware',  # Custom exception handler
 ]
 
 ROOT_URLCONF = 'config.urls'

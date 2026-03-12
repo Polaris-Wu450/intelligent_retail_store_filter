@@ -7,7 +7,16 @@ import time
 import logging
 import anthropic
 from django.conf import settings
-from .models import ActionPlan
+from django.db.models import Q
+from datetime import date
+from .models import ActionPlan, Store, Customer, Feedback
+from .exceptions import (
+    StoreConflictError,
+    CustomerConflictError,
+    CustomerWarning,
+    FeedbackDuplicateError,
+    FeedbackWarning,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -183,3 +192,332 @@ def mark_action_plan_as_failed(plan_id, error_message):
     plan.status = 'failed'
     plan.error_message = str(error_message)
     plan.save()
+
+
+# ============================================================================
+# Store Duplicate Detection
+# ============================================================================
+
+def check_and_get_store(store_id, name):
+    """
+    Store duplicate detection logic:
+    - Store ID same + name same → reuse existing
+    - Store ID same + name different → BLOCK (409)
+    
+    Returns:
+        Store object (existing or None if should create new)
+    
+    Raises:
+        StoreConflictError with details if store_id exists but name differs
+    """
+    try:
+        existing_store = Store.objects.get(store_id=store_id)
+        
+        # Store ID exists, check name
+        if existing_store.name == name:
+            # Same store_id + same name → reuse
+            logger.info(f"[STORE] Reusing existing store: {existing_store.id}")
+            return existing_store
+        else:
+            # Same store_id + different name → BLOCK
+            logger.error(
+                f"[STORE] Store ID conflict: {store_id} "
+                f"existing='{existing_store.name}' provided='{name}'"
+            )
+            raise StoreConflictError(
+                message=f'Store ID {store_id} already exists with name "{existing_store.name}", but you provided "{name}"',
+                detail={
+                    'store_id': store_id,
+                    'existing_store_id': existing_store.id,
+                    'existing_name': existing_store.name,
+                    'provided_name': name,
+                }
+            )
+    
+    except Store.DoesNotExist:
+        # No existing store with this ID, can create new
+        return None
+
+
+def create_store_if_needed(store_id, name):
+    """
+    Create store if it doesn't exist, or reuse existing one.
+    
+    Returns:
+        Store object
+    
+    Raises:
+        StoreConflictError if conflict detected
+    """
+    existing = check_and_get_store(store_id, name)
+    
+    if existing:
+        return existing
+    
+    # Create new store
+    new_store = Store.objects.create(store_id=store_id, name=name)
+    logger.info(f"[STORE] Created new store: {new_store.id}")
+    return new_store
+
+
+# ============================================================================
+# Customer Duplicate Detection
+# ============================================================================
+
+def check_and_get_customer(customer_id, first_name, last_name, phone):
+    """
+    Customer duplicate detection logic:
+    - CID same + name and phone all same → reuse existing
+    - CID same + name or phone different → WARNING (raise exception)
+    - Name + phone same + CID different → WARNING (raise exception)
+    
+    Returns:
+        Customer object if perfect match found, None if should create new
+    
+    Raises:
+        CustomerWarning if data conflicts detected
+    """
+    # Check 1: Customer ID exists?
+    try:
+        existing_by_cid = Customer.objects.get(customer_id=customer_id)
+        
+        # CID exists, check if name and phone match
+        name_matches = (existing_by_cid.first_name == first_name and 
+                       existing_by_cid.last_name == last_name)
+        phone_matches = existing_by_cid.phone == phone
+        
+        if name_matches and phone_matches:
+            # Perfect match → reuse
+            logger.info(f"[CUSTOMER] Reusing existing customer: {existing_by_cid.id}")
+            return existing_by_cid
+        else:
+            # CID same but name or phone different → WARNING
+            logger.warning(
+                f"[CUSTOMER] Customer ID {customer_id} exists with different data"
+            )
+            
+            detail = {
+                'customer_id': customer_id,
+                'existing_customer_id': existing_by_cid.id,
+            }
+            
+            if not name_matches:
+                detail['existing_name'] = f"{existing_by_cid.first_name} {existing_by_cid.last_name}"
+                detail['provided_name'] = f"{first_name} {last_name}"
+            
+            if not phone_matches:
+                detail['existing_phone'] = existing_by_cid.phone
+                detail['provided_phone'] = phone
+            
+            message_parts = [f"Customer ID {customer_id} exists but with different information."]
+            if not name_matches:
+                message_parts.append(
+                    f"Existing name: '{existing_by_cid.first_name} {existing_by_cid.last_name}', "
+                    f"provided: '{first_name} {last_name}'."
+                )
+            if not phone_matches:
+                message_parts.append(
+                    f"Existing phone: '{existing_by_cid.phone}', provided: '{phone}'."
+                )
+            
+            raise CustomerWarning(
+                message=" ".join(message_parts),
+                detail=detail
+            )
+    
+    except Customer.DoesNotExist:
+        # CID doesn't exist, check if name+phone combo exists with different CID
+        existing_by_name_phone = Customer.objects.filter(
+            first_name=first_name,
+            last_name=last_name,
+            phone=phone
+        ).first()
+        
+        if existing_by_name_phone:
+            # Name+phone match but different CID → WARNING
+            logger.warning(
+                f"[CUSTOMER] Name+phone exists with different CID: "
+                f"existing={existing_by_name_phone.customer_id}, provided={customer_id}"
+            )
+            
+            raise CustomerWarning(
+                message=(
+                    f"Customer with name '{first_name} {last_name}' and phone '{phone}' "
+                    f"already exists with Customer ID '{existing_by_name_phone.customer_id}', "
+                    f"but you provided Customer ID '{customer_id}'"
+                ),
+                detail={
+                    'existing_customer_id': existing_by_name_phone.id,
+                    'existing_cid': existing_by_name_phone.customer_id,
+                    'provided_cid': customer_id,
+                    'name': f"{first_name} {last_name}",
+                    'phone': phone,
+                }
+            )
+    
+    # No conflicts, can create new customer
+    return None
+
+
+def create_customer_if_needed(customer_id, first_name, last_name, phone):
+    """
+    Create customer if it doesn't exist, or reuse existing one.
+    
+    Returns:
+        Customer object
+    
+    Raises:
+        CustomerWarningError if warning detected
+    """
+    existing = check_and_get_customer(customer_id, first_name, last_name, phone)
+    
+    if existing:
+        return existing
+    
+    # Create new customer
+    new_customer = Customer.objects.create(
+        customer_id=customer_id,
+        first_name=first_name,
+        last_name=last_name,
+        phone=phone
+    )
+    logger.info(f"[CUSTOMER] Created new customer: {new_customer.id}")
+    return new_customer
+
+
+# ============================================================================
+# Feedback Duplicate Detection
+# ============================================================================
+
+def check_feedback_duplicate(customer, category_code, confirm=False):
+    """
+    Feedback duplicate detection logic:
+    - Same customer + same category_code + same day → BLOCK (raise FeedbackDuplicateError)
+    - Same customer + same category_code + different day → WARNING (raise FeedbackWarning unless confirm=True)
+    
+    Returns:
+        None if no duplicates or confirmed
+    
+    Raises:
+        FeedbackDuplicateError for same-day duplicates
+        FeedbackWarning for different-day duplicates without confirmation
+    """
+    today = date.today()
+    
+    # Check 1: Same customer + category + today?
+    same_day_feedback = Feedback.objects.filter(
+        customer=customer,
+        category_code=category_code,
+        created_at__date=today
+    ).first()
+    
+    if same_day_feedback:
+        # Same day duplicate → BLOCK
+        logger.error(
+            f"[FEEDBACK] Same-day duplicate: customer={customer.customer_id}, "
+            f"category={category_code}, existing_feedback_id={same_day_feedback.id}"
+        )
+        
+        raise FeedbackDuplicateError(
+            message=(
+                f"Duplicate feedback detected: Customer {customer.customer_id} "
+                f"already submitted feedback for category '{category_code}' today"
+            ),
+            detail={
+                'customer_id': customer.customer_id,
+                'category_code': category_code,
+                'existing_feedback_id': same_day_feedback.id,
+                'existing_feedback_date': same_day_feedback.created_at.date().isoformat(),
+            }
+        )
+    
+    # Check 2: Same customer + category but different day?
+    other_day_feedback = Feedback.objects.filter(
+        customer=customer,
+        category_code=category_code
+    ).exclude(created_at__date=today).first()
+    
+    if other_day_feedback and not confirm:
+        # Different day duplicate + no confirm → WARNING
+        logger.warning(
+            f"[FEEDBACK] Different-day duplicate: customer={customer.customer_id}, "
+            f"category={category_code}, previous_date={other_day_feedback.created_at.date()}"
+        )
+        
+        raise FeedbackWarning(
+            message=(
+                f"Customer {customer.customer_id} previously submitted "
+                f"feedback for category '{category_code}' on "
+                f"{other_day_feedback.created_at.date()}. "
+                f"Add 'confirm=true' to proceed anyway."
+            ),
+            detail={
+                'customer_id': customer.customer_id,
+                'category_code': category_code,
+                'existing_feedback_id': other_day_feedback.id,
+                'existing_feedback_date': other_day_feedback.created_at.date().isoformat(),
+                'action_required': 'Set confirm=true to proceed',
+            }
+        )
+    
+    # No duplicates or user confirmed
+    return None
+
+
+def create_feedback(customer, category_code, content=None, confirm=False):
+    """
+    Create feedback after duplicate checks.
+    
+    Returns:
+        Feedback object
+    
+    Raises:
+        FeedbackDuplicateError for same-day duplicates (409)
+        FeedbackWarningError for different-day duplicates without confirmation (400)
+    """
+    check_feedback_duplicate(customer, category_code, confirm)
+    
+    # Create new feedback
+    new_feedback = Feedback.objects.create(
+        customer=customer,
+        category_code=category_code,
+        content=content
+    )
+    logger.info(f"[FEEDBACK] Created new feedback: {new_feedback.id}")
+    return new_feedback
+
+
+# ============================================================================
+# Full workflow example
+# ============================================================================
+
+def create_full_feedback_entry(store_id, store_name, customer_id, first_name, 
+                                last_name, phone, category_code, content=None, 
+                                confirm=False):
+    """
+    Example of full workflow using all duplicate detection functions.
+    This is just a demonstration - adapt as needed.
+    
+    Returns:
+        dict with created objects
+    
+    Raises:
+        StoreConflictError: 409 - store_id exists with different name
+        CustomerWarningError: 400 - customer data conflicts
+        FeedbackDuplicateError: 409 - same-day feedback duplicate
+        FeedbackWarningError: 400 - different-day feedback duplicate without confirmation
+    """
+    # Step 1: Check/Create Store
+    store = create_store_if_needed(store_id, store_name)
+    
+    # Step 2: Check/Create Customer
+    customer = create_customer_if_needed(customer_id, first_name, last_name, phone)
+    
+    # Step 3: Check/Create Feedback
+    feedback = create_feedback(customer, category_code, content, confirm)
+    
+    return {
+        'store': store,
+        'customer': customer,
+        'feedback': feedback
+    }

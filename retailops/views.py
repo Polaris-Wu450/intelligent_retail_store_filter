@@ -86,3 +86,101 @@ def list_action_plans(request):
     response_data = serializers.serialize_action_plan_list(action_plans)
     return JsonResponse(response_data)
 
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def create_feedback_entry(request):
+    """
+    Create a complete feedback entry with duplicate detection.
+    
+    Expected JSON payload:
+    {
+        "store_id": "ST001",
+        "store_name": "Store A",
+        "customer_id": "CU001",
+        "first_name": "John",
+        "last_name": "Doe",
+        "phone": "1234567890",
+        "category_code": "SERVICE",
+        "content": "Great service!",
+        "confirm": false  (optional, default false)
+    }
+    
+    Response codes:
+    - 201: Successfully created
+    - 200: Success with warnings (requires user confirmation)
+    - 409: Conflict (store ID conflict or same-day feedback duplicate)
+    
+    Note: All exceptions are handled by ExceptionHandlerMiddleware.
+    The view simply raises exceptions and middleware converts them to JSON responses.
+    """
+    from .exceptions import ValidationError
+    
+    data = json.loads(request.body)
+    
+    # Extract fields
+    store_id = data.get('store_id')
+    store_name = data.get('store_name')
+    customer_id = data.get('customer_id')
+    first_name = data.get('first_name')
+    last_name = data.get('last_name')
+    phone = data.get('phone')
+    category_code = data.get('category_code')
+    content = data.get('content', '')
+    confirm = data.get('confirm', False)
+    
+    # Validate required fields
+    required_fields = {
+        'store_id': store_id,
+        'store_name': store_name,
+        'customer_id': customer_id,
+        'first_name': first_name,
+        'last_name': last_name,
+        'phone': phone,
+        'category_code': category_code
+    }
+    
+    missing = [k for k, v in required_fields.items() if not v]
+    if missing:
+        raise ValidationError(
+            message='Missing required fields',
+            detail={'missing_fields': missing}
+        )
+    
+    # Call the full workflow with duplicate detection
+    # Any exceptions raised here will be caught by ExceptionHandlerMiddleware
+    result = services.create_full_feedback_entry(
+        store_id=store_id,
+        store_name=store_name,
+        customer_id=customer_id,
+        first_name=first_name,
+        last_name=last_name,
+        phone=phone,
+        category_code=category_code,
+        content=content,
+        confirm=confirm
+    )
+    
+    # Success response
+    return JsonResponse({
+        'message': 'Feedback entry created successfully',
+        'store': {
+            'id': result['store'].id,
+            'store_id': result['store'].store_id,
+            'name': result['store'].name
+        },
+        'customer': {
+            'id': result['customer'].id,
+            'customer_id': result['customer'].customer_id,
+            'first_name': result['customer'].first_name,
+            'last_name': result['customer'].last_name,
+            'phone': result['customer'].phone
+        },
+        'feedback': {
+            'id': result['feedback'].id,
+            'category_code': result['feedback'].category_code,
+            'created_at': result['feedback'].created_at.isoformat(),
+            'content': result['feedback'].content
+        }
+    }, status=201)
+

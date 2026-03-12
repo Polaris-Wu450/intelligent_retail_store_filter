@@ -6,5 +6,6 @@ urlpatterns = [
     path('action-plans/<int:plan_id>/', views.get_action_plan, name='get_action_plan'),
     path('action-plans/<int:plan_id>/status/', views.get_action_plan_status, name='get_action_plan_status'),
     path('action-plans/list/', views.list_action_plans, name='list_action_plans'),
+    path('feedback/', views.create_feedback_entry, name='create_feedback_entry'),
 ]
 
