@@ -1,0 +1,55 @@
+const API_BASE = '/api';
+
+export const api = {
+  async createActionPlan(data) {
+    const response = await fetch(`${API_BASE}/action-plans/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+
+  async getActionPlan(planId) {
+    const response = await fetch(`${API_BASE}/action-plans/${planId}/`);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+
+  async getActionPlanStatus(planId) {
+    const response = await fetch(`${API_BASE}/action-plans/${planId}/status/`);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+
+  async listActionPlans() {
+    const response = await fetch(`${API_BASE}/action-plans/list/`);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+};
+
+export const POLLING_CONFIG = {
+  delays: [1000, 2000, 3000, 5000],
+  maxDelay: 5000,
+  maxAttempts: 30,
+};
