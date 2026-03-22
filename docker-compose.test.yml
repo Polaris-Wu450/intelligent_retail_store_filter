@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    volumes:
+      - ./test-reports:/app/test-reports
+      - .:/app
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
+      - USE_MOCK_LLM=true
+      - POSTGRES_DB=test_retailops
+      - POSTGRES_USER=test_user
+      - POSTGRES_PASSWORD=test_password
+      - DB_HOST=test-db
+      - DB_PORT=5432
+      - REDIS_URL=redis://test-redis:6379/0
+    depends_on:
+      - test-db
+      - test-redis
+    networks:
+      - test-network
+
+  test-db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=test_retailops
+      - POSTGRES_USER=test_user
+      - POSTGRES_PASSWORD=test_password
+    networks:
+      - test-network
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  test-redis:
+    image: redis:7-alpine
+    networks:
+      - test-network
+
+networks:
+  test-network:
+    driver: bridge

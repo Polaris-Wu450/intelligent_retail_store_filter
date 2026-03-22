@@ -29,6 +29,15 @@ db.sqlite3-journal
 *.swo
 *~
 
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+test-reports/
+.tox/
+coverage.xml
+*.cover
+
 # OS
 .DS_Store
 Thumbs.db
