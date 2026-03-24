@@ -37,7 +37,7 @@ RetailOps AI is a production-ready B2B platform designed for large-scale retail 
 |----------|-----------|--------|
 | Exact Match | CID same + Name/Phone same | Reuse existing customer record |
 | ID Conflict | CID same + Name/Phone different | ⚠️ WARNING: Acknowledge to continue |
-| Store Conflict | Store ID same + Store Name different | ❌ ERROR: Blocked, must correct name |
+| Store Conflict | Store ID same + Store Name different | ⚠️ WARNING: Acknowledge to continue |
 
 ### Feedback Duplicates
 

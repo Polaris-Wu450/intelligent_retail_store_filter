@@ -161,6 +161,12 @@ class FeedbackDuplicateError(BlockError):
     default_message = 'Duplicate feedback detected for today'
 
 
+class StoreWarning(WarningException):
+    """Store name mismatch warning"""
+    default_code = 'STORE_NAME_MISMATCH'
+    default_message = 'Store name mismatch detected'
+
+
 class CustomerWarning(WarningException):
     """Customer data mismatch warning"""
     default_code = 'CUSTOMER_DATA_MISMATCH'

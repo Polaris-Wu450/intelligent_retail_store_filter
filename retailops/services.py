@@ -12,6 +12,7 @@ from datetime import date
 from .models import ActionPlan, Store, Customer, Feedback
 from .exceptions import (
     StoreConflictError,
+    StoreWarning,
     CustomerConflictError,
     CustomerWarning,
     FeedbackDuplicateError,
@@ -66,68 +67,122 @@ def get_action_plan_by_id(plan_id):
 
 
 def get_all_action_plans():
-    """Retrieve all action plans"""
-    return ActionPlan.objects.all()
+    """Retrieve all action plans, ordered by newest first"""
+    return ActionPlan.objects.all().order_by('-created_at')
 
 
-def get_mock_action_plan(store_name, store_location, issue_description):
+def get_mock_action_plan(action_plan):
     """
     Mock LLM response for testing (no API call, no cost, instant)
     """
-    return f"""**IMMEDIATE ACTIONS FOR {store_name}**
+    feedback = action_plan.feedback
+    store_name = action_plan.store_name
+    category_code = feedback.category_code if feedback else "GENERAL"
+    
+    return f"""## 🔴 PROBLEM SUMMARY
+The {category_code} department at {store_name} is experiencing quality and availability issues that are frustrating customers.
 
-1. Emergency Response Team
-   - Deploy on-site manager to {store_location} within 2 hours
-   - Assess severity of: {issue_description}
-   - Document current status with photos and incident report
+---
 
-2. Short-term Solution
-   - Implement temporary workaround to minimize customer impact
-   - Notify affected customers with expected resolution timeline
-   - Set up alternative service if primary system unavailable
+## 🎯 GOALS (SMART)
+1. Restore {category_code} inventory to 95% availability — Deadline: within 48 hours — Metric: Stock count audit shows <5% out-of-stock items
+2. Achieve customer satisfaction rating of 4.5/5 for {category_code} — Deadline: by end of week — Metric: Post-purchase survey average
 
-3. Root Cause Analysis
-   - Schedule technical team inspection within 24 hours
-   - Review maintenance logs and identify failure patterns
-   - Prepare detailed incident report for management review
+---
 
-4. Communication Plan
-   - Update store staff with talking points for customer inquiries
-   - Post signage explaining situation and workarounds
-   - Monitor social media and respond to complaints within 1 hour
+## ✅ MANAGER INTERVENTIONS
+1. Store Manager → Conduct emergency inventory audit of {category_code} section and expedite restock orders → Due: within 6 hours
+2. Department Lead → Train staff on product knowledge and customer service protocols for {category_code} → Due: by tomorrow
+3. Regional Manager → Review supplier performance and negotiate faster delivery SLA → Due: within 3 days
 
-5. Follow-up Actions
-   - Schedule follow-up inspection in 7 days
-   - Update preventive maintenance schedule
-   - Train staff on early warning signs
+---
+
+## 📊 MONITORING PLAN
+- Check-in 1: 24 hours — Verify inventory levels restored and staff training completed
+- Check-in 2: 7 days — Review customer satisfaction scores and complaint volume
+Success looks like: Zero customer complaints about {category_code} availability and quality for 3 consecutive days.
 
 **MOCK DATA - FOR TESTING ONLY**"""
 
 
-def call_llm_api(store_name, store_location, issue_description):
+def call_llm_api(action_plan):
     """
-    Call real LLM API
+    Call real LLM API with structured prompt
     """
     client = anthropic.Anthropic(api_key=settings.RETAILOPS_API_KEY)
     
-    prompt = f"""You are a retail operations assistant helping B2B managers. Generate a CONCISE, actionable plan for this store issue.
+    # Extract information from linked feedback
+    feedback = action_plan.feedback
+    store_name = action_plan.store_name
+    store_id = feedback.store.store_id if feedback else "N/A"
+    category_code = feedback.category_code if feedback else "GENERAL"
+    feedback_content = feedback.content if feedback and feedback.content else action_plan.issue_description
+    created_at = feedback.created_at.strftime("%B %d, %Y") if feedback else action_plan.created_at.strftime("%B %d, %Y")
+    
+    prompt = f"""You are a retail operations consultant generating an action plan 
+for a regional manager. Be specific, actionable, and concise.
 
-Store Name: {store_name}
-Store Location: {store_location}
-Issue: {issue_description}
+STORE INFORMATION:
+- Store: {store_name} (ID: {store_id})
+- Category with issue: {category_code}
+- Customer feedback: {feedback_content}
+- Date reported: {created_at}
 
-Requirements:
-- Provide 3-5 KEY ACTIONS only
-- Each action must be SPECIFIC and IMMEDIATELY EXECUTABLE
-- Focus on high-impact solutions
-- Keep it brief - managers need to act quickly
-- Format: Action title, 2-3 bullet points with concrete steps
+Generate a structured action plan with EXACTLY these 4 sections.
+Be specific to the {category_code} department. 
+Do not use generic advice that could apply to any store.
 
-Generate a short, practical action plan now:"""
+---
+
+## 🔴 PROBLEM SUMMARY
+One sentence. What is the core issue in the {category_code} department?
+
+---
+
+## 🎯 GOALS (SMART)
+Exactly 2 goals. Each must have:
+- What: specific measurable outcome
+- By when: exact deadline (e.g., "within 48 hours", "by end of week")
+- How measured: one metric to confirm completion
+
+Format:
+1. [Goal] — Deadline: [X] — Metric: [Y]
+2. [Goal] — Deadline: [X] — Metric: [Y]
+
+---
+
+## ✅ MANAGER INTERVENTIONS
+Exactly 3 actions. Each must have:
+- Owner: who does this (Store Manager / Department Lead / Regional Manager)
+- Action: one specific thing to do, not vague
+- Deadline: exact timeframe
+
+Format:
+1. [Owner] → [Specific action] → Due: [timeframe]
+2. [Owner] → [Specific action] → Due: [timeframe]  
+3. [Owner] → [Specific action] → Due: [timeframe]
+
+---
+
+## 📊 MONITORING PLAN
+Exactly 2 checkpoints:
+- Check-in 1: [when] — [what to verify]
+- Check-in 2: [when] — [what to verify]
+Success looks like: [one sentence defining resolution]
+
+---
+
+RULES:
+- Total response must be under 300 words
+- No bullet points except where format requires
+- No generic advice like "improve customer service" or "conduct training"
+- Every action must be specific to {category_code} issues
+- If feedback is vague, make reasonable assumptions 
+  based on common {category_code} department problems"""
     
     message = client.messages.create(
         model="claude-sonnet-4-5-20250929",
-        max_tokens=800,
+        max_tokens=1000,
         messages=[{"role": "user", "content": prompt}]
     )
     
@@ -158,19 +213,11 @@ def process_action_plan_generation(plan_id):
     if use_mock:
         logger.info("[SERVICES] 🎭 Using MOCK LLM (no API call)...")
         time.sleep(1)
-        plan_content = get_mock_action_plan(
-            plan.store_name, 
-            plan.store_location, 
-            plan.issue_description
-        )
+        plan_content = get_mock_action_plan(plan)
         logger.info(f"[SERVICES] ✅ Mock LLM returned {len(plan_content)} characters")
     else:
         logger.info("[SERVICES] 🌐 Calling REAL Claude API...")
-        plan_content = call_llm_api(
-            plan.store_name,
-            plan.store_location,
-            plan.issue_description
-        )
+        plan_content = call_llm_api(plan)
         logger.info(f"[SERVICES] ✅ Claude API returned {len(plan_content)} characters")
     
     logger.info("[SERVICES] 📝 Updating status to 'completed' and saving plan_content...")
@@ -202,13 +249,13 @@ def check_and_get_store(store_id, name):
     """
     Store duplicate detection logic:
     - Store ID same + name same → reuse existing
-    - Store ID same + name different → BLOCK (409)
+    - Store ID same + name different → WARNING (200)
     
     Returns:
         Store object (existing or None if should create new)
     
     Raises:
-        StoreConflictError with details if store_id exists but name differs
+        StoreWarning with details if store_id exists but name differs
     """
     try:
         existing_store = Store.objects.get(store_id=store_id)
@@ -219,12 +266,12 @@ def check_and_get_store(store_id, name):
             logger.info(f"[STORE] Reusing existing store: {existing_store.id}")
             return existing_store
         else:
-            # Same store_id + different name → BLOCK
-            logger.error(
-                f"[STORE] Store ID conflict: {store_id} "
+            # Same store_id + different name → WARNING
+            logger.warning(
+                f"[STORE] Store name mismatch: {store_id} "
                 f"existing='{existing_store.name}' provided='{name}'"
             )
-            raise StoreConflictError(
+            raise StoreWarning(
                 message=f'Store ID {store_id} already exists with name "{existing_store.name}", but you provided "{name}"',
                 detail={
                     'store_id': store_id,
@@ -247,7 +294,7 @@ def create_store_if_needed(store_id, name):
         Store object
     
     Raises:
-        StoreConflictError if conflict detected
+        StoreWarning if name mismatch detected
     """
     existing = check_and_get_store(store_id, name)
     
@@ -264,124 +311,69 @@ def create_store_if_needed(store_id, name):
 # Customer Duplicate Detection
 # ============================================================================
 
-def check_and_get_customer(customer_id, first_name, last_name, phone):
+def check_and_get_customer(first_name, last_name, phone):
     """
-    Customer duplicate detection logic:
-    - CID same + name and phone all same → reuse existing
-    - CID same + name or phone different → WARNING (raise exception)
-    - Name + phone same + CID different → WARNING (raise exception)
+    Simplified customer lookup logic:
+    - Searches for existing customer by first_name + last_name + phone
+    - Returns customer if found, None if not
     
     Returns:
-        Customer object if perfect match found, None if should create new
-    
-    Raises:
-        CustomerWarning if data conflicts detected
+        Customer object if found, None otherwise
     """
-    # Check 1: Customer ID exists?
-    try:
-        existing_by_cid = Customer.objects.get(customer_id=customer_id)
-        
-        # CID exists, check if name and phone match
-        name_matches = (existing_by_cid.first_name == first_name and 
-                       existing_by_cid.last_name == last_name)
-        phone_matches = existing_by_cid.phone == phone
-        
-        if name_matches and phone_matches:
-            # Perfect match → reuse
-            logger.info(f"[CUSTOMER] Reusing existing customer: {existing_by_cid.id}")
-            return existing_by_cid
-        else:
-            # CID same but name or phone different → WARNING
-            logger.warning(
-                f"[CUSTOMER] Customer ID {customer_id} exists with different data"
-            )
-            
-            detail = {
-                'customer_id': customer_id,
-                'existing_customer_id': existing_by_cid.id,
-            }
-            
-            if not name_matches:
-                detail['existing_name'] = f"{existing_by_cid.first_name} {existing_by_cid.last_name}"
-                detail['provided_name'] = f"{first_name} {last_name}"
-            
-            if not phone_matches:
-                detail['existing_phone'] = existing_by_cid.phone
-                detail['provided_phone'] = phone
-            
-            message_parts = [f"Customer ID {customer_id} exists but with different information."]
-            if not name_matches:
-                message_parts.append(
-                    f"Existing name: '{existing_by_cid.first_name} {existing_by_cid.last_name}', "
-                    f"provided: '{first_name} {last_name}'."
-                )
-            if not phone_matches:
-                message_parts.append(
-                    f"Existing phone: '{existing_by_cid.phone}', provided: '{phone}'."
-                )
-            
-            raise CustomerWarning(
-                message=" ".join(message_parts),
-                detail=detail
-            )
+    existing = Customer.objects.filter(
+        first_name=first_name,
+        last_name=last_name,
+        phone=phone
+    ).first()
     
-    except Customer.DoesNotExist:
-        # CID doesn't exist, check if name+phone combo exists with different CID
-        existing_by_name_phone = Customer.objects.filter(
-            first_name=first_name,
-            last_name=last_name,
-            phone=phone
-        ).first()
-        
-        if existing_by_name_phone:
-            # Name+phone match but different CID → WARNING
-            logger.warning(
-                f"[CUSTOMER] Name+phone exists with different CID: "
-                f"existing={existing_by_name_phone.customer_id}, provided={customer_id}"
-            )
-            
-            raise CustomerWarning(
-                message=(
-                    f"Customer with name '{first_name} {last_name}' and phone '{phone}' "
-                    f"already exists with Customer ID '{existing_by_name_phone.customer_id}', "
-                    f"but you provided Customer ID '{customer_id}'"
-                ),
-                detail={
-                    'existing_customer_id': existing_by_name_phone.id,
-                    'existing_cid': existing_by_name_phone.customer_id,
-                    'provided_cid': customer_id,
-                    'name': f"{first_name} {last_name}",
-                    'phone': phone,
-                }
-            )
+    if existing:
+        logger.info(f"[CUSTOMER] Found existing customer: {existing.customer_id} ({existing.first_name} {existing.last_name})")
+        return existing
     
-    # No conflicts, can create new customer
+    logger.info(f"[CUSTOMER] No existing customer found for {first_name} {last_name} / {phone}")
     return None
 
 
-def create_customer_if_needed(customer_id, first_name, last_name, phone):
+def create_customer_if_needed(first_name, last_name, phone):
     """
     Create customer if it doesn't exist, or reuse existing one.
+    Customer ID is auto-generated by database (not provided by user).
     
     Returns:
-        Customer object
-    
-    Raises:
-        CustomerWarningError if warning detected
+        Customer object (existing or newly created)
     """
-    existing = check_and_get_customer(customer_id, first_name, last_name, phone)
+    existing = check_and_get_customer(first_name, last_name, phone)
     
     if existing:
         return existing
     
+    # Generate next customer ID (auto-increment pattern)
+    # Get highest existing customer_id number
+    last_customer = Customer.objects.order_by('-id').first()
+    if last_customer and last_customer.customer_id:
+        # Extract number from customer_id (e.g., "C001" → 1)
+        try:
+            last_num = int(last_customer.customer_id.replace('C', ''))
+            next_num = last_num + 1
+        except (ValueError, AttributeError):
+            # Fallback if format is unexpected
+            next_num = Customer.objects.count() + 1
+    else:
+        next_num = 1
+    
+    new_customer_id = f"C{next_num:03d}"  # e.g., C001, C002, C003
+    
     # Create new customer
     new_customer = Customer.objects.create(
-        customer_id=customer_id,
+        customer_id=new_customer_id,
         first_name=first_name,
         last_name=last_name,
         phone=phone
     )
-    logger.info(f"[CUSTOMER] Created new customer: {new_customer.id}")
+    logger.info(
+        f"[CUSTOMER] Created new customer: {new_customer.id} "
+        f"(Auto-generated CID: {new_customer_id})"
+    )
     return new_customer
 
 
@@ -389,11 +381,11 @@ def create_customer_if_needed(customer_id, first_name, last_name, phone):
 # Feedback Duplicate Detection
 # ============================================================================
 
-def check_feedback_duplicate(customer, category_code, confirm=False):
+def check_feedback_duplicate(store, customer, category_code, confirm=False):
     """
-    Feedback duplicate detection logic:
-    - Same customer + same category_code + same day → BLOCK (raise FeedbackDuplicateError)
-    - Same customer + same category_code + different day → WARNING (raise FeedbackWarning unless confirm=True)
+    Feedback duplicate detection logic (now includes Store):
+    - Same store + same customer + same category + same day → BLOCK (raise FeedbackDuplicateError)
+    - Same store + same customer + same category + different day → WARNING (raise FeedbackWarning unless confirm=True)
     
     Returns:
         None if no duplicates or confirmed
@@ -404,8 +396,17 @@ def check_feedback_duplicate(customer, category_code, confirm=False):
     """
     today = date.today()
     
-    # Check 1: Same customer + category + today?
+    # Category display names for user-friendly messages
+    category_names = {
+        'FURNITURE': 'Furniture',
+        'ELECTRONICS': 'Electronics',
+        'CLOTHING': 'Clothing'
+    }
+    category_display = category_names.get(category_code, category_code)
+    
+    # Check 1: Same store + customer + category + today?
     same_day_feedback = Feedback.objects.filter(
+        store=store,
         customer=customer,
         category_code=category_code,
         created_at__date=today
@@ -414,49 +415,62 @@ def check_feedback_duplicate(customer, category_code, confirm=False):
     if same_day_feedback:
         # Same day duplicate → BLOCK
         logger.error(
-            f"[FEEDBACK] Same-day duplicate: customer={customer.customer_id}, "
-            f"category={category_code}, existing_feedback_id={same_day_feedback.id}"
+            f"[FEEDBACK] Same-day duplicate: store={store.store_id}, "
+            f"customer={customer.customer_id}, category={category_code}, "
+            f"existing_feedback_id={same_day_feedback.id}"
         )
         
         raise FeedbackDuplicateError(
             message=(
-                f"Duplicate feedback detected: Customer {customer.customer_id} "
-                f"already submitted feedback for category '{category_code}' today"
+                f"You have already submitted feedback for {category_display} at "
+                f"{store.name} today. Duplicate submissions are not allowed for the same "
+                f"store, customer, category, and date. Please select a different category "
+                f"or submit tomorrow if you have additional concerns."
             ),
             detail={
+                'store_id': store.store_id,
+                'store_name': store.name,
                 'customer_id': customer.customer_id,
+                'customer_name': f"{customer.first_name} {customer.last_name}",
                 'category_code': category_code,
+                'category_display': category_display,
                 'existing_feedback_id': same_day_feedback.id,
-                'existing_feedback_date': same_day_feedback.created_at.date().isoformat(),
+                'existing_feedback_date': same_day_feedback.created_at.isoformat(),
+                'reason': 'Duplicate feedback for same store, customer, category, and date'
             }
         )
     
-    # Check 2: Same customer + category but different day?
+    # Check 2: Same store + customer + category but different day?
     other_day_feedback = Feedback.objects.filter(
+        store=store,
         customer=customer,
         category_code=category_code
-    ).exclude(created_at__date=today).first()
+    ).exclude(created_at__date=today).order_by('-created_at').first()
     
     if other_day_feedback and not confirm:
         # Different day duplicate + no confirm → WARNING
+        previous_date = other_day_feedback.created_at.strftime('%B %d, %Y')
         logger.warning(
-            f"[FEEDBACK] Different-day duplicate: customer={customer.customer_id}, "
-            f"category={category_code}, previous_date={other_day_feedback.created_at.date()}"
+            f"[FEEDBACK] Different-day duplicate: store={store.store_id}, "
+            f"customer={customer.customer_id}, category={category_code}, "
+            f"previous_date={other_day_feedback.created_at.date()}"
         )
         
         raise FeedbackWarning(
             message=(
-                f"Customer {customer.customer_id} previously submitted "
-                f"feedback for category '{category_code}' on "
-                f"{other_day_feedback.created_at.date()}. "
-                f"Add 'confirm=true' to proceed anyway."
+                f"You previously submitted feedback for {category_display} at "
+                f"{store.name} on {previous_date}. Are you sure you want to submit again?"
             ),
             detail={
+                'store_id': store.store_id,
+                'store_name': store.name,
                 'customer_id': customer.customer_id,
+                'customer_name': f"{customer.first_name} {customer.last_name}",
                 'category_code': category_code,
+                'category_display': category_display,
                 'existing_feedback_id': other_day_feedback.id,
-                'existing_feedback_date': other_day_feedback.created_at.date().isoformat(),
-                'action_required': 'Set confirm=true to proceed',
+                'existing_feedback_date': other_day_feedback.created_at.isoformat(),
+                'action_required': 'Click "Confirm & Continue" to proceed'
             }
         )
     
@@ -464,9 +478,9 @@ def check_feedback_duplicate(customer, category_code, confirm=False):
     return None
 
 
-def create_feedback(customer, category_code, content=None, confirm=False):
+def create_feedback(store, customer, category_code, content=None, confirm=False):
     """
-    Create feedback after duplicate checks.
+    Create feedback after duplicate checks (now includes Store).
     
     Returns:
         Feedback object
@@ -475,15 +489,16 @@ def create_feedback(customer, category_code, content=None, confirm=False):
         FeedbackDuplicateError for same-day duplicates (409)
         FeedbackWarningError for different-day duplicates without confirmation (400)
     """
-    check_feedback_duplicate(customer, category_code, confirm)
+    check_feedback_duplicate(store, customer, category_code, confirm)
     
-    # Create new feedback
+    # Create new feedback with store
     new_feedback = Feedback.objects.create(
+        store=store,
         customer=customer,
         category_code=category_code,
         content=content
     )
-    logger.info(f"[FEEDBACK] Created new feedback: {new_feedback.id}")
+    logger.info(f"[FEEDBACK] Created new feedback: {new_feedback.id} for store {store.store_id}")
     return new_feedback
 
 
@@ -491,33 +506,52 @@ def create_feedback(customer, category_code, content=None, confirm=False):
 # Full workflow example
 # ============================================================================
 
-def create_full_feedback_entry(store_id, store_name, customer_id, first_name, 
-                                last_name, phone, category_code, content=None, 
+def create_full_feedback_entry(store_id, store_name, first_name,
+                                last_name, phone, category_code, content=None,
                                 confirm=False):
     """
-    Example of full workflow using all duplicate detection functions.
-    This is just a demonstration - adapt as needed.
+    Full workflow for creating feedback entry.
+    Now automatically creates ActionPlan after successful feedback submission.
     
     Returns:
-        dict with created objects
+        dict with created objects (store, customer, feedback, action_plan)
     
     Raises:
-        StoreConflictError: 409 - store_id exists with different name
-        CustomerWarningError: 400 - customer data conflicts
+        StoreWarning: 200 - store_id exists with different name
         FeedbackDuplicateError: 409 - same-day feedback duplicate
-        FeedbackWarningError: 400 - different-day feedback duplicate without confirmation
+        FeedbackWarning: 200 - different-day feedback duplicate without confirmation
     """
     # Step 1: Check/Create Store
     store = create_store_if_needed(store_id, store_name)
     
-    # Step 2: Check/Create Customer
-    customer = create_customer_if_needed(customer_id, first_name, last_name, phone)
+    # Step 2: Check/Create Customer (auto-generates customer_id if new)
+    customer = create_customer_if_needed(first_name, last_name, phone)
     
-    # Step 3: Check/Create Feedback
-    feedback = create_feedback(customer, category_code, content, confirm)
+    # Step 3: Check/Create Feedback (now includes store)
+    feedback = create_feedback(store, customer, category_code, content, confirm)
+    
+    # Step 4: Auto-create ActionPlan (linked to Feedback)
+    logger.info("[FEEDBACK] Creating ActionPlan automatically...")
+    action_plan = ActionPlan.objects.create(
+        feedback=feedback,
+        store_name=store_name,
+        store_location=f"Store ID: {store_id}",
+        issue_description=(
+            f"Customer feedback from {customer.first_name} {customer.last_name} "
+            f"regarding {category_code}: {content or '(No details provided)'}"
+        ),
+        status='pending'
+    )
+    logger.info(f"[FEEDBACK] Created ActionPlan: {action_plan.id} (linked to Feedback: {feedback.id})")
+    
+    # Step 5: Dispatch task to generate action plan
+    logger.info("[FEEDBACK] Dispatching task to generate action plan...")
+    dispatch_action_plan_task(action_plan.id)
+    logger.info(f"[FEEDBACK] Task dispatched for ActionPlan: {action_plan.id}")
     
     return {
         'store': store,
         'customer': customer,
-        'feedback': feedback
+        'feedback': feedback,
+        'action_plan': action_plan
     }
