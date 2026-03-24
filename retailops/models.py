@@ -34,19 +34,20 @@ class Customer(models.Model):
 
 
 class Feedback(models.Model):
+    store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name='feedbacks')
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='feedbacks')
     category_code = models.CharField(max_length=50, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     content = models.TextField(blank=True, null=True)
-    
+
     class Meta:
         db_table = 'feedbacks'
         indexes = [
-            models.Index(fields=['customer', 'category_code', 'created_at'], name='idx_feedback_key'),
+            models.Index(fields=['store', 'customer', 'category_code', 'created_at'], name='idx_feedback_full_key'),
         ]
-    
+
     def __str__(self):
-        return f"Feedback {self.id} - {self.customer} - {self.category_code}"
+        return f"Feedback {self.id} - {self.store.store_id} - {self.customer.customer_id} - {self.category_code}"
 
 
 class ActionPlan(models.Model):
@@ -57,6 +58,7 @@ class ActionPlan(models.Model):
         ('failed', 'Failed'),
     ]
     
+    feedback = models.ForeignKey(Feedback, on_delete=models.CASCADE, related_name='action_plans', null=True, blank=True)
     store_name = models.CharField(max_length=200)
     store_location = models.CharField(max_length=200)
     issue_description = models.TextField()
