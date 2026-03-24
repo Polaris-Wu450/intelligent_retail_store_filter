@@ -1,8 +1,8 @@
 import redis
-import anthropic
 from django.core.management.base import BaseCommand
 from django.conf import settings
 from retailops.models import ActionPlan
+from retailops.llm_service import get_llm_service
 
 
 class Command(BaseCommand):
@@ -10,10 +10,11 @@ class Command(BaseCommand):
     
     def handle(self, *args, **options):
         redis_client = redis.from_url(settings.REDIS_URL)
-        anthropic_client = anthropic.Anthropic(api_key=settings.RETAILOPS_API_KEY)
+        llm_service = get_llm_service()
         
         self.stdout.write(self.style.SUCCESS('Worker started. Listening to Redis queue...'))
-        self.stdout.write(f'Queue: {settings.REDIS_QUEUE_NAME}\n')
+        self.stdout.write(f'Queue: {settings.REDIS_QUEUE_NAME}')
+        self.stdout.write(f'LLM Provider: {llm_service.get_model_name()}\n')
         
         while True:
             try:
@@ -27,7 +28,7 @@ class Command(BaseCommand):
                 plan_id = int(plan_id_bytes.decode('utf-8'))
                 
                 self.stdout.write(f'\n📥 Received task: ActionPlan ID={plan_id}')
-                self.process_action_plan(plan_id, anthropic_client)
+                self.process_action_plan(plan_id, llm_service)
                 
             except KeyboardInterrupt:
                 self.stdout.write(self.style.WARNING('\n\nWorker stopped by user.'))
@@ -35,7 +36,7 @@ class Command(BaseCommand):
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f'\n❌ Error: {e}'))
     
-    def process_action_plan(self, plan_id, anthropic_client):
+    def process_action_plan(self, plan_id, llm_service):
         try:
             plan = ActionPlan.objects.get(id=plan_id)
             
@@ -62,13 +63,7 @@ Requirements:
 Generate a short, practical action plan now:"""
             
             self.stdout.write(f'   Calling LLM...')
-            message = anthropic_client.messages.create(
-                model="claude-sonnet-4-5-20250929",
-                max_tokens=800,
-                messages=[{"role": "user", "content": prompt}]
-            )
-            
-            plan_content = message.content[0].text
+            plan_content = llm_service.generate(prompt, max_tokens=800)
             
             plan.status = 'completed'
             plan.plan_content = plan_content

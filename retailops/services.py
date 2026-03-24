@@ -5,11 +5,11 @@ Handles: Database operations, LLM API calls, Task dispatching
 import os
 import time
 import logging
-import anthropic
 from django.conf import settings
 from django.db.models import Q
 from datetime import date
 from .models import ActionPlan, Store, Customer, Feedback
+from .llm_service import get_llm_service
 from .exceptions import (
     StoreConflictError,
     StoreWarning,
@@ -107,9 +107,9 @@ Success looks like: Zero customer complaints about {category_code} availability 
 
 def call_llm_api(action_plan):
     """
-    Call real LLM API with structured prompt
+    Call LLM API with structured prompt using abstraction layer
     """
-    client = anthropic.Anthropic(api_key=settings.RETAILOPS_API_KEY)
+    llm = get_llm_service()
     
     # Extract information from linked feedback
     feedback = action_plan.feedback
@@ -180,13 +180,8 @@ RULES:
 - If feedback is vague, make reasonable assumptions 
   based on common {category_code} department problems"""
     
-    message = client.messages.create(
-        model="claude-sonnet-4-5-20250929",
-        max_tokens=1000,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    
-    return message.content[0].text
+    logger.info(f"[SERVICES] Using LLM provider: {llm.get_model_name()}")
+    return llm.generate(prompt, max_tokens=1000)
 
 
 def process_action_plan_generation(plan_id):
