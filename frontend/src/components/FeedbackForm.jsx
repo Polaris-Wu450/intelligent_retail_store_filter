@@ -19,6 +19,7 @@ function FeedbackForm({ onSuccess }) {
   const [customerNotFoundMessage, setCustomerNotFoundMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [polling, setPolling] = useState(false);
+  const [successBanner, setSuccessBanner] = useState(false);
   const [warningModal, setWarningModal] = useState({ open: false, message: '' });
   const [errorModal, setErrorModal] = useState({ open: false, message: '' });
   
@@ -204,6 +205,10 @@ function FeedbackForm({ onSuccess }) {
         setCustomerNotFoundMessage('');
         attemptRef.current = 0;
         
+        // Show success banner
+        setSuccessBanner(true);
+        setTimeout(() => setSuccessBanner(false), 5000);
+        
         console.log('[FeedbackForm] Calling onSuccess...');
         if (onSuccess) {
           onSuccess(statusData);
@@ -260,6 +265,19 @@ function FeedbackForm({ onSuccess }) {
 
   return (
     <>
+      {/* Success Banner */}
+      {successBanner && (
+        <div className="mb-6 bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">✅</span>
+            <div>
+              <p className="font-semibold text-emerald-800">Feedback Submitted Successfully</p>
+              <p className="text-sm text-emerald-700 mt-1">Action plan has been generated and is ready for review</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-lg shadow-sm p-8">
         {!loading && !polling ? (
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -430,20 +448,20 @@ function FeedbackForm({ onSuccess }) {
           <>
             <button
               onClick={handleWarningCancel}
-              className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              className="px-5 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
             >
               Cancel
             </button>
             <button
               onClick={handleWarningConfirm}
-              className="px-4 py-2 text-white bg-yellow-600 rounded-lg hover:bg-yellow-700 transition-colors"
+              className="px-5 py-2.5 text-white bg-amber-600 rounded-lg hover:bg-amber-700 transition-colors font-medium shadow-sm"
             >
               Confirm & Continue
             </button>
           </>
         }
       >
-        <p className="text-gray-700 whitespace-pre-line">{warningModal.message}</p>
+        <p className="text-gray-700 whitespace-pre-line leading-relaxed">{warningModal.message}</p>
       </Modal>
 
       {/* Error Modal */}
@@ -455,13 +473,13 @@ function FeedbackForm({ onSuccess }) {
         actions={
           <button
             onClick={handleErrorClose}
-            className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+            className="px-5 py-2.5 text-white bg-rose-600 rounded-lg hover:bg-rose-700 transition-colors font-medium shadow-sm"
           >
             OK
           </button>
         }
       >
-        <p className="text-gray-700 whitespace-pre-line">{errorModal.message}</p>
+        <p className="text-gray-700 whitespace-pre-line leading-relaxed">{errorModal.message}</p>
       </Modal>
     </>
   );

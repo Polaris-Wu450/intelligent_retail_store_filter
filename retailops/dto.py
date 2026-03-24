@@ -359,3 +359,158 @@ class EcommerceAdapter(BaseIntakeAdapter):
         
         logger.info("[ECOMMERCE_ADAPTER] ✅ Validation passed")
         return True
+
+
+class SupermarketChainAdapter(BaseIntakeAdapter):
+    """
+    Adapter for supermarket chain complaint system
+    
+    Expected format:
+    {
+        "branch": {
+            "code": "BJ-001",
+            "display_name": "Beijing Chaoyang Branch"
+        },
+        "reporter": {
+            "contact_name": "Li Ming",
+            "tel": "13900000000"
+        },
+        "complaint": {
+            "type_code": "QUALITY",
+            "description": "Expired products on shelf",
+            "submitted_at": "2026-03-23T10:30:00"
+        }
+    }
+    """
+    
+    def parse(self, raw_data: Any) -> dict:
+        """
+        Parse supermarket chain data with deep nested structure
+        """
+        if not isinstance(raw_data, dict):
+            raise ValueError(f"Expected dict, got {type(raw_data)}")
+        
+        logger.info("[SUPERMARKET_ADAPTER] Parsing supermarket chain data")
+        
+        branch = raw_data.get('branch', {})
+        reporter = raw_data.get('reporter', {})
+        complaint = raw_data.get('complaint', {})
+        
+        # Split contact_name into first and last name
+        contact_name = reporter.get('contact_name', '')
+        name_parts = contact_name.split(' ', 1) if contact_name else ['', '']
+        
+        parsed = {
+            'branch_code': branch.get('code'),
+            'branch_name': branch.get('display_name', ''),
+            'reporter_first': name_parts[0] if len(name_parts) > 0 else '',
+            'reporter_last': name_parts[1] if len(name_parts) > 1 else '',
+            'reporter_tel': reporter.get('tel', ''),
+            'complaint_type': complaint.get('type_code'),
+            'complaint_desc': complaint.get('description', ''),
+            'submitted_at': complaint.get('submitted_at', ''),
+        }
+        
+        return parsed
+    
+    def transform(self, parsed_data: dict) -> InternalFeedback:
+        """
+        Transform parsed data to InternalFeedback format
+        """
+        logger.info("[SUPERMARKET_ADAPTER] Transforming to InternalFeedback")
+        
+        # Generate customer_id from reporter name + tel
+        customer_id = (
+            f"SM_{parsed_data['reporter_tel']}"
+            if parsed_data.get('reporter_tel')
+            else f"SM_{parsed_data['branch_code']}_{parsed_data['reporter_first']}"
+        )
+        
+        return InternalFeedback(
+            customer_id=customer_id,
+            store_id=str(parsed_data['branch_code']),
+            category_code=parsed_data['complaint_type'],
+            first_name=parsed_data['reporter_first'],
+            last_name=parsed_data['reporter_last'],
+            phone=parsed_data['reporter_tel'],
+            store_name=parsed_data['branch_name'],
+            content=parsed_data['complaint_desc'],
+            source='supermarket_chain',
+            raw_data=parsed_data
+        )
+    
+    def validate(self, internal_feedback: InternalFeedback) -> bool:
+        """
+        Validate InternalFeedback object with supermarket-specific rules
+        """
+        logger.info("[SUPERMARKET_ADAPTER] Validating InternalFeedback")
+        
+        if not internal_feedback.store_id:
+            raise ValueError("branch_code is required")
+        
+        if not internal_feedback.category_code:
+            raise ValueError("complaint_type is required")
+        
+        if not internal_feedback.customer_id:
+            raise ValueError("reporter information is required")
+        
+        # Supermarket-specific validation: store_id must start with branch prefix
+        if not internal_feedback.store_id.startswith(('BJ-', 'SH-', 'GZ-', 'SZ-')):
+            logger.warning(f"[SUPERMARKET_ADAPTER] Unusual branch code format: {internal_feedback.store_id}")
+        
+        logger.info("[SUPERMARKET_ADAPTER] ✅ Validation passed")
+        return True
+
+
+# ============================================================================
+# Adapter Factory
+# ============================================================================
+
+_ADAPTER_REGISTRY = {
+    'ecommerce': EcommerceAdapter,
+    'supermarket_chain': SupermarketChainAdapter,
+}
+
+
+def register_adapter(source: str, adapter_class: type):
+    """
+    Register a new adapter for a data source
+    
+    Args:
+        source: Data source identifier (e.g., 'small_chain', 'mall_partner')
+        adapter_class: Adapter class (must inherit from BaseIntakeAdapter)
+    """
+    if not issubclass(adapter_class, BaseIntakeAdapter):
+        raise ValueError(f"{adapter_class} must inherit from BaseIntakeAdapter")
+    
+    _ADAPTER_REGISTRY[source] = adapter_class
+    logger.info(f"[FACTORY] Registered adapter: {source} -> {adapter_class.__name__}")
+
+
+def get_adapter(source: str) -> BaseIntakeAdapter:
+    """
+    Get adapter instance for a data source
+    
+    Args:
+        source: Data source identifier (e.g., 'ecommerce', 'small_chain')
+    
+    Returns:
+        BaseIntakeAdapter: Adapter instance for the source
+    
+    Raises:
+        ValueError: If source is not registered
+    
+    Example:
+        adapter = get_adapter('ecommerce')
+        internal = adapter.convert(raw_data)
+    """
+    adapter_class = _ADAPTER_REGISTRY.get(source)
+    
+    if adapter_class is None:
+        available = ', '.join(_ADAPTER_REGISTRY.keys())
+        raise ValueError(
+            f"Unknown data source: '{source}'. "
+            f"Available sources: {available}"
+        )
+    
+    return adapter_class()
