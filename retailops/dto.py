@@ -2,11 +2,85 @@
 Data Transfer Objects (DTOs) for internal data normalization
 Provides unified format for feedback data from multiple sources
 """
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Any
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class BaseIntakeAdapter(ABC):
+    """
+    Abstract base class for data intake adapters
+    All concrete adapters must implement these three methods
+    """
+    
+    @abstractmethod
+    def parse(self, raw_data: Any) -> dict:
+        """
+        Parse raw input data into a normalized dictionary
+        
+        Args:
+            raw_data: Raw input data (dict, XML string, JSON string, etc.)
+        
+        Returns:
+            dict: Parsed data in a normalized structure
+        
+        Raises:
+            ValueError: If parsing fails
+        """
+        pass
+    
+    @abstractmethod
+    def transform(self, parsed_data: dict) -> 'InternalFeedback':
+        """
+        Transform parsed data into InternalFeedback format
+        
+        Args:
+            parsed_data: Normalized dictionary from parse()
+        
+        Returns:
+            InternalFeedback: Internal standard format object
+        
+        Raises:
+            ValueError: If required fields are missing
+        """
+        pass
+    
+    @abstractmethod
+    def validate(self, internal_feedback: 'InternalFeedback') -> bool:
+        """
+        Validate the transformed InternalFeedback object
+        
+        Args:
+            internal_feedback: InternalFeedback object to validate
+        
+        Returns:
+            bool: True if validation passes
+        
+        Raises:
+            ValueError: If validation fails with specific error message
+        """
+        pass
+    
+    def convert(self, raw_data: Any) -> 'InternalFeedback':
+        """
+        Full conversion pipeline: parse -> transform -> validate
+        
+        Args:
+            raw_data: Raw input data
+        
+        Returns:
+            InternalFeedback: Validated internal format object
+        
+        Raises:
+            ValueError: If any step fails
+        """
+        parsed = self.parse(raw_data)
+        internal = self.transform(parsed)
+        self.validate(internal)
+        return internal
 
 
 @dataclass
@@ -193,3 +267,95 @@ class FeedbackAdapter:
                 "Unable to detect data source format. "
                 "Expected one of: cust_id, CustomerID, or buyer_id"
             )
+
+
+# ============================================================================
+# Concrete Adapter Implementations using BaseIntakeAdapter
+# ============================================================================
+
+class EcommerceAdapter(BaseIntakeAdapter):
+    """
+    Adapter for e-commerce platform with nested JSON structure
+    
+    Expected format:
+    {
+        "shop_id": "S001",
+        "shop_name": "Beijing Store",
+        "client": {
+            "first": "Zhang",
+            "last": "San",
+            "mobile": "13800001111"
+        },
+        "complaint_type": "FURNITURE",
+        "complaint_text": "Chair quality issue"
+    }
+    """
+    
+    def parse(self, raw_data: Any) -> dict:
+        """
+        Parse e-commerce JSON data, handle nested structures
+        """
+        if not isinstance(raw_data, dict):
+            raise ValueError(f"Expected dict, got {type(raw_data)}")
+        
+        logger.info("[ECOMMERCE_ADAPTER] Parsing e-commerce data")
+        
+        # Extract nested client data
+        client = raw_data.get('client', {})
+        
+        # Flatten nested structure
+        parsed = {
+            'shop_id': raw_data.get('shop_id'),
+            'shop_name': raw_data.get('shop_name', ''),
+            'client_first': client.get('first', ''),
+            'client_last': client.get('last', ''),
+            'client_mobile': client.get('mobile', ''),
+            'complaint_type': raw_data.get('complaint_type'),
+            'complaint_text': raw_data.get('complaint_text', ''),
+        }
+        
+        return parsed
+    
+    def transform(self, parsed_data: dict) -> InternalFeedback:
+        """
+        Transform parsed data to InternalFeedback format
+        """
+        logger.info("[ECOMMERCE_ADAPTER] Transforming to InternalFeedback")
+        
+        # Generate customer_id from client data if not provided
+        customer_id = (
+            f"{parsed_data['client_first']}_{parsed_data['client_last']}_{parsed_data['client_mobile']}"
+            if parsed_data.get('client_mobile')
+            else f"ECOM_{parsed_data['shop_id']}_{parsed_data['client_first']}"
+        )
+        
+        return InternalFeedback(
+            customer_id=customer_id,
+            store_id=str(parsed_data['shop_id']),
+            category_code=parsed_data['complaint_type'],
+            first_name=parsed_data['client_first'],
+            last_name=parsed_data['client_last'],
+            phone=parsed_data['client_mobile'],
+            store_name=parsed_data['shop_name'],
+            content=parsed_data['complaint_text'],
+            source='ecommerce_adapter',
+            raw_data=parsed_data
+        )
+    
+    def validate(self, internal_feedback: InternalFeedback) -> bool:
+        """
+        Validate InternalFeedback object
+        """
+        logger.info("[ECOMMERCE_ADAPTER] Validating InternalFeedback")
+        
+        if not internal_feedback.store_id:
+            raise ValueError("store_id is required")
+        
+        if not internal_feedback.category_code:
+            raise ValueError("category_code is required")
+        
+        if not internal_feedback.customer_id:
+            raise ValueError("customer_id is required")
+        
+        logger.info("[ECOMMERCE_ADAPTER] ✅ Validation passed")
+        return True
