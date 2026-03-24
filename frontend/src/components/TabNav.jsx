@@ -2,16 +2,16 @@ function TabNav({ activeTab, onTabChange }) {
   return (
     <div className="tabs">
       <button
-        className={`tab-button ${activeTab === 'create' ? 'active' : ''}`}
-        onClick={() => onTabChange('create')}
+        className={`tab-button ${activeTab === 'feedback' ? 'active' : ''}`}
+        onClick={() => onTabChange('feedback')}
       >
-        Create New Plan
+        Submit Feedback
       </button>
       <button
-        className={`tab-button ${activeTab === 'search' ? 'active' : ''}`}
-        onClick={() => onTabChange('search')}
+        className={`tab-button ${activeTab === 'dashboard' ? 'active' : ''}`}
+        onClick={() => onTabChange('dashboard')}
       >
-        Search & Browse Plans
+        Action Plans Dashboard
       </button>
     </div>
   )
