@@ -208,14 +208,15 @@ def list_stores(request):
     GET /api/stores/
     Returns list of all stores for dropdown selection.
     """
-    stores = Store.objects.all().order_by('name')
-    
+    stores = Store.objects.all().order_by('store_id')
+
     return JsonResponse({
         'stores': [
             {
                 'id': store.id,
                 'store_id': store.store_id,
-                'name': store.name
+                'name': store.name,
+                'display_name': f"{store.name} ({store.store_id})"
             }
             for store in stores
         ]
@@ -231,14 +232,13 @@ def get_customer_by_id(request):
     first_name = request.GET.get('first_name', '').strip()
     last_name = request.GET.get('last_name', '').strip()
     phone = request.GET.get('phone', '').strip()
-    
+
     if not all([first_name, last_name, phone]):
         return JsonResponse({
             'error': 'first_name, last_name, and phone are all required'
         }, status=400)
-    
+
     try:
-        # All three fields must match exactly
         customer = Customer.objects.get(
             first_name=first_name,
             last_name=last_name,
@@ -260,71 +260,9 @@ def get_customer_by_id(request):
             'message': 'New customer - will be created upon submission'
         }, status=404)
     except Customer.MultipleObjectsReturned:
-        # Should not happen with proper data, but handle it
         return JsonResponse({
             'error': 'Multiple customers found with same details'
         }, status=409)
-
-
-@require_http_methods(["GET"])
-def list_stores(request):
-    """
-    GET /api/stores/
-    Returns a list of all stores
-    """
-    from .models import Store
-    
-    stores = Store.objects.all().order_by('store_id')
-    
-    return JsonResponse({
-        'stores': [
-            {
-                'id': store.id,
-                'store_id': store.store_id,
-                'name': store.name,
-                'display_name': f"{store.name} ({store.store_id})"
-            }
-            for store in stores
-        ]
-    })
-
-
-@require_http_methods(["GET"])
-def get_customer_by_id(request):
-    """
-    GET /api/customers/?first_name=xx&last_name=xx&phone=xx
-    Returns customer details if found, 404 otherwise
-    """
-    from .models import Customer
-    
-    first_name = request.GET.get('first_name')
-    last_name = request.GET.get('last_name')
-    phone = request.GET.get('phone')
-    
-    if not (first_name and last_name and phone):
-        return JsonResponse({
-            'error': 'first_name, last_name, and phone parameters are required'
-        }, status=400)
-    
-    try:
-        customer = Customer.objects.get(
-            first_name=first_name,
-            last_name=last_name,
-            phone=phone
-        )
-        return JsonResponse({
-            'found': True,
-            'id': customer.id,
-            'customer_id': customer.customer_id,
-            'first_name': customer.first_name,
-            'last_name': customer.last_name,
-            'phone': customer.phone
-        })
-    except Customer.DoesNotExist:
-        return JsonResponse({
-            'found': False,
-            'message': 'New customer - will be created upon submission'
-        }, status=200)
 
 
 def list_feedback(request):

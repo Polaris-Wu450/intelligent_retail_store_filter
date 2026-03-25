@@ -84,6 +84,7 @@ class FeedbackProcessor:
             
             # Create feedback record
             feedback = Feedback.objects.create(
+                store=store,
                 customer=customer,
                 category_code=internal_feedback.category_code,
                 content=internal_feedback.content,

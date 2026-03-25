@@ -1,0 +1,28 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "django-backend",
+      "runtimeExecutable": "/Users/polaris.wu/Desktop/intelligent_retail_store_filter/venv/bin/python3",
+      "runtimeArgs": ["manage.py", "runserver", "0.0.0.0:8000"],
+      "port": 8000,
+      "env": {
+        "DB_HOST": "localhost",
+        "POSTGRES_DB": "retailops",
+        "POSTGRES_USER": "retailops",
+        "POSTGRES_PASSWORD": "retailops123",
+        "REDIS_URL": "redis://localhost:6379/0",
+        "USE_MOCK_LLM": "true",
+        "DEBUG": "True",
+        "RETAILOPS_API_KEY": "test"
+      }
+    },
+    {
+      "name": "vite-frontend",
+      "runtimeExecutable": "/opt/homebrew/bin/node",
+      "runtimeArgs": ["node_modules/.bin/vite"],
+      "port": 3000,
+      "cwd": "frontend"
+    }
+  ]
+}
