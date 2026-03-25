@@ -75,7 +75,7 @@ def get_mock_action_plan(action_plan):
     """
     Mock LLM response for testing (no API call, no cost, instant)
     """
-    feedback = action_plan.feedback
+    feedback = action_plan.feedback if action_plan.feedback_id else None
     store_name = action_plan.store_name
     category_code = feedback.category_code if feedback else "GENERAL"
     
@@ -110,11 +110,11 @@ def call_llm_api(action_plan):
     Call LLM API with structured prompt using abstraction layer
     """
     llm = get_llm_service()
-    
-    # Extract information from linked feedback
+
+    # Extract information from linked feedback (feedback may be None for standalone plans)
     feedback = action_plan.feedback
     store_name = action_plan.store_name
-    store_id = feedback.store.store_id if feedback else "N/A"
+    store_id = feedback.store.store_id if feedback and feedback.store else "N/A"
     category_code = feedback.category_code if feedback else "GENERAL"
     feedback_content = feedback.content if feedback and feedback.content else action_plan.issue_description
     created_at = feedback.created_at.strftime("%B %d, %Y") if feedback else action_plan.created_at.strftime("%B %d, %Y")
