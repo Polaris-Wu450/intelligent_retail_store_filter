@@ -46,6 +46,19 @@ def serialize_action_plan_created(action_plan):
     return result
 
 
+def _serialize_customer_from_plan(action_plan):
+    """Extract customer info from action plan's linked feedback"""
+    feedback = action_plan.feedback if action_plan.feedback_id else None
+    if feedback and feedback.customer:
+        return {
+            'customer_id': feedback.customer.customer_id,
+            'first_name': feedback.customer.first_name,
+            'last_name': feedback.customer.last_name,
+            'phone': feedback.customer.phone,
+        }
+    return None
+
+
 def serialize_action_plan_detail(action_plan):
     """Serialize full action plan details"""
     return {
@@ -56,6 +69,7 @@ def serialize_action_plan_detail(action_plan):
         'status': action_plan.status,
         'plan_content': action_plan.plan_content,
         'error_message': action_plan.error_message,
+        'customer': _serialize_customer_from_plan(action_plan),
         'created_at': action_plan.created_at.isoformat(),
         'updated_at': action_plan.updated_at.isoformat(),
     }
@@ -89,6 +103,7 @@ def serialize_action_plan_list(action_plans):
         'status': plan.status,
         'plan_content': plan.plan_content,
         'error_message': plan.error_message,
+        'customer': _serialize_customer_from_plan(plan),
         'created_at': plan.created_at.isoformat(),
         'updated_at': plan.updated_at.isoformat(),
     } for plan in action_plans]
