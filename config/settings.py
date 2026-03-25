@@ -12,13 +12,16 @@ ALLOWED_HOSTS = ['*']
 INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.staticfiles',
+    'django_prometheus',
     'retailops',
 ]
 
 MIDDLEWARE = [
+    'django_prometheus.middleware.PrometheusBeforeMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'retailops.middleware.ExceptionHandlerMiddleware',  # Custom exception handler
+    'retailops.middleware.ExceptionHandlerMiddleware',
+    'django_prometheus.middleware.PrometheusAfterMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -41,7 +44,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
+        'ENGINE': 'django_prometheus.db.backends.postgresql',
         'NAME': os.getenv('POSTGRES_DB', 'retailops'),
         'USER': os.getenv('POSTGRES_USER', 'retailops'),
         'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'retailops123'),

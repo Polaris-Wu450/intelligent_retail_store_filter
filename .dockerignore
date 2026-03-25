@@ -16,4 +16,6 @@ db.sqlite3
 .DS_Store
 README.md
 QUICKSTART.md
+frontend/node_modules
+static/dist
 

@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Any
 import logging
 import os
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -95,43 +96,75 @@ class ClaudeService(BaseLLMService):
         """
         Generate text using Claude API with single prompt
         """
+        from retailops.metrics import record_llm_api_call, record_llm_tokens, record_llm_response_length
+        
         max_tokens = kwargs.get('max_tokens', 1000)
         temperature = kwargs.get('temperature', 1.0)
         
         logger.info(f"[CLAUDE_SERVICE] Generating with prompt length: {len(prompt)}")
         
-        message = self.client.messages.create(
-            model=self.model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        
-        response = message.content[0].text
-        logger.info(f"[CLAUDE_SERVICE] ✅ Generated {len(response)} characters")
-        
-        return response
+        start_time = time.time()
+        try:
+            message = self.client.messages.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            
+            duration = time.time() - start_time
+            response = message.content[0].text
+            
+            # Record metrics
+            record_llm_api_call('claude', self.model, 'success', duration)
+            record_llm_tokens('claude', self.model, message.usage.input_tokens, message.usage.output_tokens)
+            record_llm_response_length('claude', self.model, len(response))
+            
+            logger.info(f"[CLAUDE_SERVICE] ✅ Generated {len(response)} characters in {duration:.2f}s")
+            return response
+            
+        except Exception as e:
+            duration = time.time() - start_time
+            record_llm_api_call('claude', self.model, 'error', duration)
+            logger.error(f"[CLAUDE_SERVICE] ❌ API call failed after {duration:.2f}s: {e}")
+            raise
     
     def generate_with_messages(self, messages: List[Dict[str, str]], **kwargs) -> str:
         """
         Generate text using Claude API with conversation messages
         """
+        from retailops.metrics import record_llm_api_call, record_llm_tokens, record_llm_response_length
+        
         max_tokens = kwargs.get('max_tokens', 1000)
         temperature = kwargs.get('temperature', 1.0)
         
         logger.info(f"[CLAUDE_SERVICE] Generating with {len(messages)} messages")
         
-        message = self.client.messages.create(
-            model=self.model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            messages=messages
-        )
-        
-        response = message.content[0].text
-        logger.info(f"[CLAUDE_SERVICE] ✅ Generated {len(response)} characters")
-        
-        return response
+        start_time = time.time()
+        try:
+            message = self.client.messages.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                messages=messages
+            )
+            
+            duration = time.time() - start_time
+            response = message.content[0].text
+            
+            # Record metrics
+            record_llm_api_call('claude', self.model, 'success', duration)
+            record_llm_tokens('claude', self.model, message.usage.input_tokens, message.usage.output_tokens)
+            record_llm_response_length('claude', self.model, len(response))
+            
+            logger.info(f"[CLAUDE_SERVICE] ✅ Generated {len(response)} characters in {duration:.2f}s")
+            return response
+            
+        except Exception as e:
+            duration = time.time() - start_time
+            record_llm_api_call('claude', self.model, 'error', duration)
+            logger.error(f"[CLAUDE_SERVICE] ❌ API call failed after {duration:.2f}s: {e}")
+            raise
     
     def get_model_name(self) -> str:
         """Get Claude model name"""
@@ -172,43 +205,77 @@ class OpenAIService(BaseLLMService):
         """
         Generate text using OpenAI API with single prompt
         """
+        from retailops.metrics import record_llm_api_call, record_llm_tokens, record_llm_response_length
+        
         max_tokens = kwargs.get('max_tokens', 1000)
         temperature = kwargs.get('temperature', 1.0)
         
         logger.info(f"[OPENAI_SERVICE] Generating with prompt length: {len(prompt)}")
         
-        response = self.client.chat.completions.create(
-            model=self.model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        
-        result = response.choices[0].message.content
-        logger.info(f"[OPENAI_SERVICE] ✅ Generated {len(result)} characters")
-        
-        return result
+        start_time = time.time()
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            
+            duration = time.time() - start_time
+            result = response.choices[0].message.content
+            
+            # Record metrics
+            record_llm_api_call('openai', self.model, 'success', duration)
+            if hasattr(response, 'usage'):
+                record_llm_tokens('openai', self.model, response.usage.prompt_tokens, response.usage.completion_tokens)
+            record_llm_response_length('openai', self.model, len(result))
+            
+            logger.info(f"[OPENAI_SERVICE] ✅ Generated {len(result)} characters in {duration:.2f}s")
+            return result
+            
+        except Exception as e:
+            duration = time.time() - start_time
+            record_llm_api_call('openai', self.model, 'error', duration)
+            logger.error(f"[OPENAI_SERVICE] ❌ API call failed after {duration:.2f}s: {e}")
+            raise
     
     def generate_with_messages(self, messages: List[Dict[str, str]], **kwargs) -> str:
         """
         Generate text using OpenAI API with conversation messages
         """
+        from retailops.metrics import record_llm_api_call, record_llm_tokens, record_llm_response_length
+        
         max_tokens = kwargs.get('max_tokens', 1000)
         temperature = kwargs.get('temperature', 1.0)
         
         logger.info(f"[OPENAI_SERVICE] Generating with {len(messages)} messages")
         
-        response = self.client.chat.completions.create(
-            model=self.model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            messages=messages
-        )
-        
-        result = response.choices[0].message.content
-        logger.info(f"[OPENAI_SERVICE] ✅ Generated {len(result)} characters")
-        
-        return result
+        start_time = time.time()
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                messages=messages
+            )
+            
+            duration = time.time() - start_time
+            result = response.choices[0].message.content
+            
+            # Record metrics
+            record_llm_api_call('openai', self.model, 'success', duration)
+            if hasattr(response, 'usage'):
+                record_llm_tokens('openai', self.model, response.usage.prompt_tokens, response.usage.completion_tokens)
+            record_llm_response_length('openai', self.model, len(result))
+            
+            logger.info(f"[OPENAI_SERVICE] ✅ Generated {len(result)} characters in {duration:.2f}s")
+            return result
+            
+        except Exception as e:
+            duration = time.time() - start_time
+            record_llm_api_call('openai', self.model, 'error', duration)
+            logger.error(f"[OPENAI_SERVICE] ❌ API call failed after {duration:.2f}s: {e}")
+            raise
     
     def get_model_name(self) -> str:
         """Get OpenAI model name"""

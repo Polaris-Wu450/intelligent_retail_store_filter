@@ -1,6 +1,6 @@
 import json
 import logging
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from .models import ActionPlan, Store, Customer
@@ -325,6 +325,21 @@ def get_customer_by_id(request):
             'found': False,
             'message': 'New customer - will be created upon submission'
         }, status=200)
+
+
+@require_http_methods(["GET"])
+def prometheus_metrics(request):
+    """
+    Custom metrics endpoint that syncs Celery worker metrics from Redis
+    before returning Prometheus metrics
+    """
+    from .metrics import sync_metrics_from_redis
+    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+    
+    sync_metrics_from_redis()
+    
+    metrics = generate_latest()
+    return HttpResponse(metrics, content_type=CONTENT_TYPE_LATEST)
 
 
 def list_feedback(request):

@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 def create_action_plan(store_name, store_location, issue_description):
     """Create new action plan record with pending status"""
+    from retailops.metrics import record_action_plan_created
+    
     logger.info("[SERVICES] 💾 create_action_plan() called")
     logger.info(f"[SERVICES] Input parameters (type: {type(store_name)}, {type(store_location)}, {type(issue_description)}):")
     logger.info(f"[SERVICES]   - store_name: {store_name}")
@@ -37,6 +39,9 @@ def create_action_plan(store_name, store_location, issue_description):
         issue_description=issue_description,
         status='pending'
     )
+    
+    # Record metric
+    record_action_plan_created('pending')
     
     logger.info(f"[SERVICES] ✅ ActionPlan created in database:")
     logger.info(f"[SERVICES]   - Type: {type(action_plan)}")
@@ -189,9 +194,13 @@ def process_action_plan_generation(plan_id):
     Business logic for generating action plan using LLM
     Updates database status throughout process
     """
+    from retailops.metrics import record_action_plan_generation
+    
     logger.info("=" * 80)
     logger.info("[SERVICES] 🤖 process_action_plan_generation() called (in Celery worker)")
     logger.info(f"[SERVICES] plan_id: {plan_id} (type: {type(plan_id)})")
+    
+    start_time = time.time()
     
     logger.info("[SERVICES] 🗄️  Fetching ActionPlan from database...")
     plan = ActionPlan.objects.get(id=plan_id)
@@ -205,27 +214,38 @@ def process_action_plan_generation(plan_id):
     use_mock = os.getenv('USE_MOCK_LLM', 'false').lower() == 'true'
     logger.info(f"[SERVICES] 🔧 USE_MOCK_LLM: {use_mock}")
     
-    if use_mock:
-        logger.info("[SERVICES] 🎭 Using MOCK LLM (no API call)...")
-        time.sleep(1)
-        plan_content = get_mock_action_plan(plan)
-        logger.info(f"[SERVICES] ✅ Mock LLM returned {len(plan_content)} characters")
-    else:
-        logger.info("[SERVICES] 🌐 Calling REAL Claude API...")
-        plan_content = call_llm_api(plan)
-        logger.info(f"[SERVICES] ✅ Claude API returned {len(plan_content)} characters")
-    
-    logger.info("[SERVICES] 📝 Updating status to 'completed' and saving plan_content...")
-    plan.status = 'completed'
-    plan.plan_content = plan_content
-    plan.save()
-    logger.info("[SERVICES] ✅ Final status saved to database")
-    
-    result = {'status': 'completed', 'plan_id': plan_id, 'mock': use_mock}
-    logger.info(f"[SERVICES] 🎉 Process complete! Result: {result}")
-    logger.info("=" * 80)
-    
-    return result
+    try:
+        if use_mock:
+            logger.info("[SERVICES] 🎭 Using MOCK LLM (no API call)...")
+            time.sleep(1)
+            plan_content = get_mock_action_plan(plan)
+            logger.info(f"[SERVICES] ✅ Mock LLM returned {len(plan_content)} characters")
+        else:
+            logger.info("[SERVICES] 🌐 Calling REAL Claude API...")
+            plan_content = call_llm_api(plan)
+            logger.info(f"[SERVICES] ✅ Claude API returned {len(plan_content)} characters")
+        
+        logger.info("[SERVICES] 📝 Updating status to 'completed' and saving plan_content...")
+        plan.status = 'completed'
+        plan.plan_content = plan_content
+        plan.save()
+        logger.info("[SERVICES] ✅ Final status saved to database")
+        
+        # Record metrics
+        duration = time.time() - start_time
+        record_action_plan_generation(duration, 'completed')
+        
+        result = {'status': 'completed', 'plan_id': plan_id, 'mock': use_mock}
+        logger.info(f"[SERVICES] 🎉 Process complete! Result: {result}")
+        logger.info("=" * 80)
+        
+        return result
+        
+    except Exception as e:
+        duration = time.time() - start_time
+        record_action_plan_generation(duration, 'failed')
+        logger.error(f"[SERVICES] ❌ Action plan generation failed after {duration:.2f}s: {e}")
+        raise
 
 
 def mark_action_plan_as_failed(plan_id, error_message):
@@ -252,6 +272,8 @@ def check_and_get_store(store_id, name):
     Raises:
         StoreWarning with details if store_id exists but name differs
     """
+    from retailops.metrics import record_store_name_mismatch
+    
     try:
         existing_store = Store.objects.get(store_id=store_id)
         
@@ -266,6 +288,10 @@ def check_and_get_store(store_id, name):
                 f"[STORE] Store name mismatch: {store_id} "
                 f"existing='{existing_store.name}' provided='{name}'"
             )
+            
+            # Record metric
+            record_store_name_mismatch(store_id)
+            
             raise StoreWarning(
                 message=f'Store ID {store_id} already exists with name "{existing_store.name}", but you provided "{name}"',
                 detail={
@@ -389,6 +415,8 @@ def check_feedback_duplicate(store, customer, category_code, confirm=False):
         FeedbackDuplicateError for same-day duplicates
         FeedbackWarning for different-day duplicates without confirmation
     """
+    from retailops.metrics import record_feedback_duplicate_block, record_feedback_duplicate_warning
+    
     today = date.today()
     
     # Category display names for user-friendly messages
@@ -414,6 +442,9 @@ def check_feedback_duplicate(store, customer, category_code, confirm=False):
             f"customer={customer.customer_id}, category={category_code}, "
             f"existing_feedback_id={same_day_feedback.id}"
         )
+        
+        # Record metric
+        record_feedback_duplicate_block(category_code)
         
         raise FeedbackDuplicateError(
             message=(
@@ -450,6 +481,9 @@ def check_feedback_duplicate(store, customer, category_code, confirm=False):
             f"customer={customer.customer_id}, category={category_code}, "
             f"previous_date={other_day_feedback.created_at.date()}"
         )
+        
+        # Record metric
+        record_feedback_duplicate_warning(category_code)
         
         raise FeedbackWarning(
             message=(
