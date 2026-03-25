@@ -323,7 +323,14 @@ def list_feedback(request):
             'feedback_id': feedback.id,
             'store_id': feedback.store.store_id,
             'store_name': feedback.store.name,
+            'customer': {
+                'customer_id': feedback.customer.customer_id,
+                'first_name': feedback.customer.first_name,
+                'last_name': feedback.customer.last_name,
+                'phone': feedback.customer.phone,
+            },
             'category_code': feedback.category_code,
+            'content': feedback.content,
             'created_at': feedback.created_at.isoformat(),
             'status': action_plan.status if action_plan else 'no_plan',
             'action_plan': None
