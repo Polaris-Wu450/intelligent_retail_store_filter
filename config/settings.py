@@ -45,7 +45,7 @@ DATABASES = {
         'NAME': os.getenv('POSTGRES_DB', 'retailops'),
         'USER': os.getenv('POSTGRES_USER', 'retailops'),
         'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'retailops123'),
-        'HOST': os.getenv('DB_HOST', 'db'),
+        'HOST': os.getenv('DB_HOST', 'localhost'),
         'PORT': os.getenv('DB_PORT', '5432'),
     }
 }

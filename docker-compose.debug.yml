@@ -30,6 +30,7 @@ services:
       - RETAILOPS_API_KEY=${RETAILOPS_API_KEY}
       - DEBUG=${DEBUG}
       - SECRET_KEY=${SECRET_KEY}
+      - DB_HOST=db
     depends_on:
       - db
 

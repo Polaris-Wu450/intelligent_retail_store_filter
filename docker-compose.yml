@@ -38,6 +38,7 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - REDIS_URL=redis://redis:6379/0
       - USE_MOCK_LLM=${USE_MOCK_LLM:-false}
+      - DB_HOST=db
     depends_on:
       - db
       - redis
@@ -56,6 +57,7 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - REDIS_URL=redis://redis:6379/0
       - USE_MOCK_LLM=${USE_MOCK_LLM:-false}
+      - DB_HOST=db
     depends_on:
       - db
       - redis
