@@ -39,7 +39,7 @@ A web application for retail store operations teams to submit customer feedback 
 │   ├── exceptions.py        # Typed exception hierarchy
 │   ├── middleware.py        # Centralised JSON exception handler
 │   └── tasks.py             # Celery async tasks
-├── frontend/                # React app (Vite dev server)
+├── frontend/                # React app
 ├── tests/
 │   ├── unit/
 │   └── integration/
