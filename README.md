@@ -1,82 +1,209 @@
-# RetailOps AI: Enterprise Feedback & Action Plan System
+# RetailOps AI
 
-## 1. Background
+A web application for retail store operations teams to submit customer feedback and automatically generate AI-powered action plans via LLM.
 
-RetailOps AI is a production-ready B2B platform designed for large-scale retail operations.
+---
 
-- **Customer**: Regional Managers and Operations Teams.
-- **Problem**: Manual processing of customer feedback, identifying category-specific issues (e.g., sofas, beds), and creating actionable improvement plans takes 20-40 minutes per entry. High volumes lead to backlogs and missed SLAs.
-- **Solution**: A web application that automates data entry, performs strict integrity checks, and uses LLMs to generate "Action Plans" to improve store performance and compliance.
+## Tech Stack
 
-## 2. Key Features
+| Layer | Technology |
+|---|---|
+| Backend | Django 4.2.9, plain Django views (no DRF) |
+| Frontend | React 18, Vite 5, Tailwind CSS 3 |
+| Database | PostgreSQL 15 |
+| Cache / Broker | Redis |
+| Task Queue | Celery + Redis |
+| LLM | Anthropic Claude / OpenAI (abstract service layer) |
+| Containerization | Docker, Docker Compose |
+| Tests | Pytest, 50%+ coverage enforced |
 
-- **Intelligent Data Entry**: Web form for customer, store, and feedback data.
-- **Real-time Validation**: Strict validation for Store IDs, Customer IDs, and category codes.
-- **Advanced Duplicate Detection**: Multi-layered logic to prevent redundant processing of the same complaint across different channels (e.g., Taobao, JD.com, SMS).
-- **AI-Powered Action Plans**: Automatically generates Problem Lists, SMART Goals, and Manager Interventions using LLM (Claude/OpenAI).
-- **High Performance**: Multi-level caching (Redis) and asynchronous task queues (SQS/Celery) to support 5,000+ QPS and reduce response times from 2s to 800ms.
-- **Compliance & Reporting**: One-click export for regional performance audits.
+---
 
-## 3. Tech Stack
+## Project Structure
 
-| Component | Technology |
-|-----------|-----------|
-| Backend | Django 5.0, Django REST Framework (DRF) |
-| Database | PostgreSQL (AWS RDS) |
-| Caching | Redis (Local Memory Cache) |
-| Task Queue | AWS SQS / Celery + Redis |
-| AI Engine | Anthropic Claude / OpenAI API |
-| Infrastructure | Docker, Terraform, AWS (EC2, S3, Lambda) |
-| Testing | Pytest, TDD Methodology |
-
-## 4. Duplicate Detection & Integrity Logic
-
-### Customer/Store Integrity
-
-| Scenario | Condition | Result |
-|----------|-----------|--------|
-| Exact Match | CID same + Name/Phone same | Reuse existing customer record |
-| ID Conflict | CID same + Name/Phone different | ⚠️ WARNING: Acknowledge to continue |
-| Store Conflict | Store ID same + Store Name different | ⚠️ WARNING: Acknowledge to continue |
-
-### Feedback Duplicates
-
-| Scenario | Condition | Result |
-|----------|-----------|--------|
-| Exact Duplicate | Same Customer + Same Category + Same Day | ❌ ERROR: Blocked (Prevent double-processing) |
-| Possible Duplicate | Same Customer + Same Category + Different Day | ⚠️ WARNING: Flag as follow-up |
-
-## 5. Quick Start
-
-### Prerequisites
-
-- Docker & Docker Compose
-- AWS CLI (for SQS/S3 integration)
-
-### Setup
-
-```bash
-# 1. Clone repository
-git clone <repo-url>
-cd retailops-ai
-
-# 2. Configure Environment
-cp backend/.env.example backend/.env
-# Add your ANTHROPIC_API_KEY or OPENAI_API_KEY
-
-# 3. Spin up Infrastructure (DB, Redis, Django, Worker)
-docker-compose up -d
-
-# 4. Initialize Database & Admin
-docker-compose exec backend python manage.py migrate
-docker-compose exec backend python manage.py createsuperuser
+```
+.
+├── config/                  # Django settings and root URL conf
+├── retailops/
+│   ├── api/                 # HTTP layer: views, urls, serializers
+│   ├── services/            # Business logic (one module per domain)
+│   │   ├── store.py
+│   │   ├── customer.py
+│   │   ├── feedback.py
+│   │   └── action_plan.py
+│   ├── llm/                 # LLM abstraction (Claude / OpenAI)
+│   ├── intake/              # Multi-source data adapters (DTOs)
+│   ├── models.py            # Store, Customer, Feedback, ActionPlan
+│   ├── exceptions.py        # Typed exception hierarchy
+│   ├── middleware.py        # Centralised JSON exception handler
+│   └── tasks.py             # Celery async tasks
+├── frontend/                # React app
+├── tests/
+│   ├── unit/
+│   └── integration/
+├── docs/                    # API docs, Postman collection
+├── infra/
+│   ├── aws/                 # (placeholder) future AWS setup
+│   └── monitoring/          # (placeholder) future monitoring config
+├── docker-compose.yml
+├── docker-compose.test.yml
+└── Makefile
 ```
 
-## 6. Action Plan Generation (LLM Output)
+---
 
-The system analyzes raw feedback and clinical notes to generate a structured report with these mandatory headers:
+## Quick Start
 
+```bash
+# Start all services (DB, Redis, Django, Celery worker)
+make start
+
+# Seed demo data
+make seed
+
+# App available at http://localhost:8000
+```
+
+Other useful commands:
+
+```bash
+make up        # docker-compose up -d (no migration)
+make down      # stop all services
+make migrate   # run Django migrations
+make test      # run pytest locally
+```
+
+---
+
+## API Endpoints
+
+All endpoints are under `/api/`.
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/feedback/` | Submit feedback (triggers action plan) |
+| `GET` | `/api/feedback/` | List feedback (`?category=&store_id=`) |
+| `GET` | `/api/stores/` | List all stores (for frontend dropdown) |
+| `GET` | `/api/customers/` | Lookup customer by name + phone |
+| `POST` | `/api/action-plans/` | Create action plan manually |
+| `GET` | `/api/action-plans/list/` | List all action plans |
+| `GET` | `/api/action-plans/<id>/` | Get action plan detail |
+| `GET` | `/api/action-plans/<id>/status/` | Poll action plan status |
+
+### POST /api/feedback/ — required fields
+
+```json
+{
+  "store_id":      "ST001",
+  "store_name":    "Store A",
+  "first_name":    "John",
+  "last_name":     "Doe",
+  "phone":         "1234567890",
+  "category_code": "SERVICE",
+  "content":       "...",
+  "confirm":       false
+}
+```
+
+`customer_id` is **not** accepted from the client — it is auto-generated by the backend.
+
+---
+
+## Duplicate Detection Logic
+
+### Store
+
+| Condition | Result |
+|---|---|
+| `store_id` exists, `name` matches | Reuse existing store |
+| `store_id` exists, `name` differs | **409** `STORE_ID_CONFLICT` (hard block) |
+| `store_id` not found | Create new store |
+
+> Note: In the UI, stores are selected from a dropdown, so a name mismatch can only occur via direct API calls or future multi-source intake. The check exists as a data-integrity guard for those cases.
+
+### Customer
+
+Identity key: `first_name + last_name + phone`
+
+| Condition | Result |
+|---|---|
+| Exact match on all three fields | Reuse existing customer |
+| Any field differs | Create new customer (auto-generated ID: `C001`, `C002`…) |
+
+No warnings are raised for customer data — a different phone or name simply means a different person.
+
+### Feedback
+
+| Condition | Result |
+|---|---|
+| Same store + customer + category + **today** | **409** `FEEDBACK_DUPLICATE` (hard block) |
+| Same store + customer + category + **different day** | **200** `FEEDBACK_ALREADY_EXISTS` (soft warning) |
+| No prior match | **201** Created |
+
+For the soft warning case, re-submit with `"confirm": true` to proceed.
+
+---
+
+## Error Response Format
+
+All errors follow a consistent JSON envelope:
+
+```json
+{
+  "type":    "validation_error | block_error | warning",
+  "code":    "VALIDATION_FAILED | STORE_ID_CONFLICT | FEEDBACK_DUPLICATE | ...",
+  "message": "Human-readable description",
+  "detail":  { }
+}
+```
+
+Warnings (HTTP 200) wrap their payload under a `warnings` array:
+
+```json
+{
+  "warnings": [
+    { "type": "warning", "code": "FEEDBACK_ALREADY_EXISTS", "message": "...", "detail": { } }
+  ]
+}
+```
+
+Errors are handled centrally by `ExceptionHandlerMiddleware` — no try/except scattered in views.
+
+---
+
+## LLM / Action Plan Generation
+
+Action plans are generated asynchronously via Celery. The LLM service is abstracted behind `BaseLLMService`; swap between Claude and OpenAI by setting `USE_MOCK_LLM` in `.env`.
+
+Generated plans include:
 1. Problem List / Root Cause Analysis
-2. Goals (SMART)
+2. SMART Goals
 3. Manager Interventions / Operational Plan
-4. Monitoring Plan & SLA Tracking
+4. Monitoring Plan
+
+---
+
+## Multi-Source Intake (Planned)
+
+`retailops/intake/dto.py` contains `FeedbackAdapter` with normalisation logic for three external source formats:
+
+- `SmallChainStore` — single-field name, direct phone
+- `LargeMallPartner` — structured name, formatted phone
+- `EcommercePlatform` — display name, contact number
+
+Once the intake pipeline is wired, external sources push to a unified `InternalFeedback` DTO before entering the same service layer.
+
+---
+
+## Environment Variables
+
+Copy `.env.example` to `.env` and fill in:
+
+```
+ANTHROPIC_API_KEY=
+OPENAI_API_KEY=
+USE_MOCK_LLM=true       # set false to call real LLM
+DEBUG=True
+DATABASE_URL=postgresql://retailops:retailops123@localhost:5432/retailops
+REDIS_URL=redis://localhost:6379/0
+```

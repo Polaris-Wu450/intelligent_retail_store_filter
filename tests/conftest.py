@@ -54,17 +54,16 @@ def sample_feedback_data():
 
 @pytest.fixture
 def complete_feedback_request():
-    """Complete feedback request payload"""
+    """Complete feedback request payload. customer_id is not included — backend auto-generates it."""
     return {
         'store_id': 'ST001',
         'store_name': 'Test Store A',
-        'customer_id': 'CU001',
         'first_name': 'John',
         'last_name': 'Doe',
         'phone': '1234567890',
         'category_code': 'SERVICE',
         'content': 'Great service!',
-        'confirm': False
+        'confirm': False,
     }
 
 

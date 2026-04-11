@@ -144,36 +144,18 @@ class FeedbackValidationError(ValidationError):
 
 
 class StoreConflictError(BlockError):
-    """Store ID already exists with different name"""
+    """Store ID already exists with a different name — hard block."""
     default_code = 'STORE_ID_CONFLICT'
     default_message = 'Store ID already exists with different name'
 
 
-class CustomerConflictError(BlockError):
-    """Customer data conflicts detected"""
-    default_code = 'CUSTOMER_DATA_CONFLICT'
-    default_message = 'Customer data conflicts detected'
-
-
 class FeedbackDuplicateError(BlockError):
-    """Duplicate feedback detected (same day)"""
+    """Same store + customer + category submitted twice on the same day."""
     default_code = 'FEEDBACK_DUPLICATE'
     default_message = 'Duplicate feedback detected for today'
 
 
-class StoreWarning(WarningException):
-    """Store name mismatch warning"""
-    default_code = 'STORE_NAME_MISMATCH'
-    default_message = 'Store name mismatch detected'
-
-
-class CustomerWarning(WarningException):
-    """Customer data mismatch warning"""
-    default_code = 'CUSTOMER_DATA_MISMATCH'
-    default_message = 'Customer data mismatch detected'
-
-
 class FeedbackWarning(WarningException):
-    """Feedback already exists on different day"""
+    """Same store + customer + category submitted on a different day — requires confirmation."""
     default_code = 'FEEDBACK_ALREADY_EXISTS'
-    default_message = 'Similar feedback already exists on different day'
+    default_message = 'Similar feedback already exists on a different day'

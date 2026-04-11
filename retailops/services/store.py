@@ -1,6 +1,6 @@
 import logging
 from ..models import Store
-from ..exceptions import StoreWarning
+from ..exceptions import StoreConflictError
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ def check_and_get_store(store_id, name):
             f"[STORE] Name mismatch for {store_id}: "
             f"existing='{existing_store.name}' provided='{name}'"
         )
-        raise StoreWarning(
+        raise StoreConflictError(
             message=(
                 f'Store ID {store_id} already exists with name "{existing_store.name}", '
                 f'but you provided "{name}"'
