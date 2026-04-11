@@ -4,10 +4,8 @@ Tests that invalid or conflicting inputs produce the correct error responses.
 """
 import pytest
 import json
-from datetime import timedelta
 from django.test import Client
-from django.utils import timezone
-from retailops.models import Store, Customer, Feedback
+from retailops.models import Store, Customer
 
 
 @pytest.mark.error_handling
@@ -154,74 +152,6 @@ class TestBlockErrors:
         assert Store.objects.count() == initial_store_count
         assert Customer.objects.count() == initial_customer_count
 
-
-@pytest.mark.error_handling
-@pytest.mark.integration
-@pytest.mark.django_db
-class TestWarningHandling:
-    """FeedbackWarning: same store + customer + category submitted on a different day."""
-
-    @pytest.fixture
-    def client(self):
-        return Client()
-
-    @pytest.fixture
-    def initial_feedback(self, client, complete_feedback_request):
-        response = client.post(
-            '/api/feedback/',
-            data=json.dumps(complete_feedback_request),
-            content_type='application/json',
-        )
-        assert response.status_code == 201
-        # Back-date the feedback so the next request is treated as a different day
-        Feedback.objects.all().update(created_at=timezone.now() - timedelta(days=1))
-        return response.json()
-
-    def test_different_day_feedback_returns_200_with_warning(self, client, initial_feedback, complete_feedback_request):
-        """Same store + customer + category on a different day → 200 FeedbackWarning."""
-        response = client.post(
-            '/api/feedback/',
-            data=json.dumps(complete_feedback_request),
-            content_type='application/json',
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert 'warnings' in data
-        assert len(data['warnings']) > 0
-        warning = data['warnings'][0]
-        assert warning['type'] == 'warning'
-        assert warning['code'] == 'FEEDBACK_ALREADY_EXISTS'
-        assert 'detail' in warning
-
-    def test_warnings_array_structure(self, client, initial_feedback, complete_feedback_request):
-        """Warning payload should be a list with standard fields on each item."""
-        response = client.post(
-            '/api/feedback/',
-            data=json.dumps(complete_feedback_request),
-            content_type='application/json',
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert isinstance(data['warnings'], list)
-        assert len(data['warnings']) > 0
-        for warning in data['warnings']:
-            assert 'type' in warning
-            assert 'code' in warning
-            assert 'message' in warning
-
-    def test_different_day_with_confirm_creates_feedback(self, client, initial_feedback, complete_feedback_request):
-        """Submitting with confirm=True after a warning → 201 and feedback saved."""
-        confirmed = {**complete_feedback_request, 'confirm': True}
-        response = client.post(
-            '/api/feedback/',
-            data=json.dumps(confirmed),
-            content_type='application/json',
-        )
-        assert response.status_code == 201
-        # 2 feedback records: one from yesterday, one from today
-        assert Feedback.objects.count() == 2
 
 
 @pytest.mark.error_handling

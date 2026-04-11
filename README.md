@@ -14,6 +14,7 @@ A web application for retail store operations teams to submit customer feedback 
 | Cache / Broker | Redis |
 | Task Queue | Celery + Redis |
 | LLM | Anthropic Claude / OpenAI (abstract service layer) |
+| Monitoring | Prometheus + Grafana (django-prometheus) |
 | Containerization | Docker, Docker Compose |
 | Tests | Pytest, 50%+ coverage enforced |
 
@@ -33,18 +34,23 @@ A web application for retail store operations teams to submit customer feedback 
 │   │   └── action_plan.py
 │   ├── llm/                 # LLM abstraction (Claude / OpenAI)
 │   ├── intake/              # Multi-source data adapters (DTOs)
+│   ├── metrics.py           # Prometheus custom metric definitions
 │   ├── models.py            # Store, Customer, Feedback, ActionPlan
 │   ├── exceptions.py        # Typed exception hierarchy
 │   ├── middleware.py        # Centralised JSON exception handler
 │   └── tasks.py             # Celery async tasks
-├── frontend/                # React app
+├── frontend/                # React app (Vite dev server)
 ├── tests/
 │   ├── unit/
 │   └── integration/
 ├── docs/                    # API docs, Postman collection
 ├── infra/
 │   ├── aws/                 # (placeholder) future AWS setup
-│   └── monitoring/          # (placeholder) future monitoring config
+│   └── monitoring/          # Prometheus + Grafana config
+│       ├── prometheus.yml
+│       └── grafana/
+│           ├── provisioning/
+│           └── dashboards/
 ├── docker-compose.yml
 ├── docker-compose.test.yml
 └── Makefile
@@ -55,23 +61,35 @@ A web application for retail store operations teams to submit customer feedback 
 ## Quick Start
 
 ```bash
-# Start all services (DB, Redis, Django, Celery worker)
-make start
+# Build and start all services
+docker-compose up -d --build
+
+# Run migrations
+make migrate
 
 # Seed demo data
 make seed
-
-# App available at http://localhost:8000
 ```
 
 Other useful commands:
 
 ```bash
-make up        # docker-compose up -d (no migration)
+make up        # docker-compose up -d (no build)
 make down      # stop all services
-make migrate   # run Django migrations
 make test      # run pytest locally
 ```
+
+---
+
+## Service URLs
+
+| Service | URL | Notes |
+|---|---|---|
+| Frontend (React dev) | `http://localhost:3000` | `npm run dev` in `frontend/` |
+| Django API | `http://localhost:8000` | Proxied by Vite in dev |
+| Grafana | `http://localhost:3001` | `admin / admin` — dashboard auto-loads |
+| Prometheus | `http://localhost:9090` | Raw metric queries |
+| Django metrics endpoint | `http://localhost:8000/metrics` | Scraped by Prometheus every 15s |
 
 ---
 
@@ -100,8 +118,7 @@ All endpoints are under `/api/`.
   "last_name":     "Doe",
   "phone":         "1234567890",
   "category_code": "SERVICE",
-  "content":       "...",
-  "confirm":       false
+  "content":       "..."
 }
 ```
 
@@ -119,7 +136,7 @@ All endpoints are under `/api/`.
 | `store_id` exists, `name` differs | **409** `STORE_ID_CONFLICT` (hard block) |
 | `store_id` not found | Create new store |
 
-> Note: In the UI, stores are selected from a dropdown, so a name mismatch can only occur via direct API calls or future multi-source intake. The check exists as a data-integrity guard for those cases.
+> In the UI, stores are always selected from a dropdown, so a name mismatch can only arise via direct API calls or future multi-source intake. The check exists as a data-integrity guard for those cases.
 
 ### Customer
 
@@ -130,17 +147,15 @@ Identity key: `first_name + last_name + phone`
 | Exact match on all three fields | Reuse existing customer |
 | Any field differs | Create new customer (auto-generated ID: `C001`, `C002`…) |
 
-No warnings are raised for customer data — a different phone or name simply means a different person.
+No warnings are raised — a different name or phone simply means a different person.
 
 ### Feedback
 
 | Condition | Result |
 |---|---|
 | Same store + customer + category + **today** | **409** `FEEDBACK_DUPLICATE` (hard block) |
-| Same store + customer + category + **different day** | **200** `FEEDBACK_ALREADY_EXISTS` (soft warning) |
+| Same store + customer + category + **different day** | **201** Created (allowed freely) |
 | No prior match | **201** Created |
-
-For the soft warning case, re-submit with `"confirm": true` to proceed.
 
 ---
 
@@ -150,24 +165,31 @@ All errors follow a consistent JSON envelope:
 
 ```json
 {
-  "type":    "validation_error | block_error | warning",
-  "code":    "VALIDATION_FAILED | STORE_ID_CONFLICT | FEEDBACK_DUPLICATE | ...",
+  "type":    "validation_error | block_error",
+  "code":    "VALIDATION_FAILED | STORE_ID_CONFLICT | FEEDBACK_DUPLICATE",
   "message": "Human-readable description",
   "detail":  { }
 }
 ```
 
-Warnings (HTTP 200) wrap their payload under a `warnings` array:
-
-```json
-{
-  "warnings": [
-    { "type": "warning", "code": "FEEDBACK_ALREADY_EXISTS", "message": "...", "detail": { } }
-  ]
-}
-```
-
 Errors are handled centrally by `ExceptionHandlerMiddleware` — no try/except scattered in views.
+
+---
+
+## Monitoring
+
+Prometheus scrapes `/metrics` every 15 seconds. Grafana at `localhost:3001` auto-loads the **RetailOps** dashboard with 6 panels:
+
+| Panel | What it detects |
+|---|---|
+| Feedback Submissions / min | Drop to zero = system down |
+| Dedup Events / min | High same-day rate = users retrying; store_conflict = upstream data issue |
+| HTTP Request Latency p95 | p95 > 500ms = investigate DB or serialization |
+| HTTP 5xx Rate | Any sustained rate = code crash or DB failure |
+| Celery Task Duration p95 | p95 > 30s = LLM slow or worker backlog |
+| Action Plan Outcomes | High failed rate = LLM API key issue or network timeout |
+
+Custom metrics are defined in `retailops/metrics.py` and instrumented in the service layer.
 
 ---
 

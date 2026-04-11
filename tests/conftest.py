@@ -4,7 +4,7 @@ Pytest configuration and fixtures for all tests
 import pytest
 from django.conf import settings
 from django.core.management import call_command
-from datetime import date, timedelta
+from datetime import date
 import os
 
 
@@ -73,7 +73,3 @@ def today():
     return date.today()
 
 
-@pytest.fixture
-def yesterday():
-    """Get yesterday's date"""
-    return date.today() - timedelta(days=1)

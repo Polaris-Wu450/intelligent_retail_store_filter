@@ -1,6 +1,7 @@
 import logging
 from ..models import Store
 from ..exceptions import StoreConflictError
+from ..metrics import dedup_events_total
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,7 @@ def check_and_get_store(store_id, name):
         if existing_store.name == name:
             logger.info(f"[STORE] Reusing existing store: {existing_store.id}")
             return existing_store
+        dedup_events_total.labels(type='store_conflict').inc()
         logger.warning(
             f"[STORE] Name mismatch for {store_id}: "
             f"existing='{existing_store.name}' provided='{name}'"

@@ -48,16 +48,12 @@ export const api = {
   },
 
   async submitFeedback(data, confirm = false) {
-    const url = confirm 
-      ? `${API_BASE}/feedback/?confirm=true` 
-      : `${API_BASE}/feedback/`;
-    
-    const response = await fetch(url, {
+    const response = await fetch(`${API_BASE}/feedback/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify({ ...data, confirm }),
     });
 
     const responseData = await response.json();

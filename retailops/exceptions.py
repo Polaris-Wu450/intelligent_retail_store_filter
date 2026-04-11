@@ -153,9 +153,3 @@ class FeedbackDuplicateError(BlockError):
     """Same store + customer + category submitted twice on the same day."""
     default_code = 'FEEDBACK_DUPLICATE'
     default_message = 'Duplicate feedback detected for today'
-
-
-class FeedbackWarning(WarningException):
-    """Same store + customer + category submitted on a different day — requires confirmation."""
-    default_code = 'FEEDBACK_ALREADY_EXISTS'
-    default_message = 'Similar feedback already exists on a different day'

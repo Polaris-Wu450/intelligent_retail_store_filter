@@ -10,15 +10,18 @@ DEBUG = True
 ALLOWED_HOSTS = ['*']
 
 INSTALLED_APPS = [
+    'django_prometheus',
     'django.contrib.contenttypes',
     'django.contrib.staticfiles',
     'retailops',
 ]
 
 MIDDLEWARE = [
+    'django_prometheus.middleware.PrometheusBeforeMiddleware',  # must be first
     'django.middleware.security.SecurityMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'retailops.middleware.ExceptionHandlerMiddleware',  # Custom exception handler
+    'retailops.middleware.ExceptionHandlerMiddleware',
+    'django_prometheus.middleware.PrometheusAfterMiddleware',   # must be last
 ]
 
 ROOT_URLCONF = 'config.urls'

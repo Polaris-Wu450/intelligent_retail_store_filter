@@ -1,0 +1,172 @@
+{
+  "id": null,
+  "uid": "retailops-main",
+  "title": "RetailOps",
+  "tags": ["retailops"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Feedback Submissions / min",
+      "type": "timeseries",
+      "description": "Rate of feedback submissions. Drop to zero = system down. Spike = abnormal traffic.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(retailops_feedback_submissions_total{result=\"created\"}[1m]) * 60",
+          "legendFormat": "Created"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 2,
+      "title": "Dedup Events / min",
+      "type": "timeseries",
+      "description": "High same_day rate = users retrying; store_conflict = upstream data integrity issue.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(retailops_dedup_events_total{type=\"same_day\"}[1m]) * 60",
+          "legendFormat": "Same-day block"
+        },
+        {
+          "expr": "rate(retailops_dedup_events_total{type=\"store_conflict\"}[1m]) * 60",
+          "legendFormat": "Store conflict"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 3,
+      "title": "HTTP Request Latency p95 (ms)",
+      "type": "timeseries",
+      "description": "95th percentile response time. Over 500ms = investigate DB or serialization.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(django_http_request_duration_seconds_bucket[5m])) * 1000",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.50, rate(django_http_request_duration_seconds_bucket[5m])) * 1000",
+          "legendFormat": "p50"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 300 },
+              { "color": "red", "value": 500 }
+            ]
+          }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 4,
+      "title": "HTTP 5xx Rate",
+      "type": "timeseries",
+      "description": "Unhandled server errors. Any sustained 5xx = code crash or DB failure.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(django_http_requests_total_by_view_transport_status_total{status=~\"5..\"}[5m])",
+          "legendFormat": "5xx / sec"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "fixedColor": "red", "mode": "fixed" },
+          "custom": { "lineWidth": 2, "fillOpacity": 15 }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 5,
+      "title": "Action Plan: Celery Task Duration p95 (s)",
+      "type": "timeseries",
+      "description": "LLM task completion time. Over 30s = LLM slow or worker backlog.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(retailops_celery_task_duration_seconds_bucket[5m]))",
+          "legendFormat": "p95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 15 },
+              { "color": "red", "value": 30 }
+            ]
+          }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 6,
+      "title": "Action Plan Outcomes",
+      "type": "timeseries",
+      "description": "High failed rate = LLM API key issue or network timeout.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(retailops_action_plan_total{status=\"completed\"}[5m]) * 60",
+          "legendFormat": "Completed / min"
+        },
+        {
+          "expr": "rate(retailops_action_plan_total{status=\"failed\"}[5m]) * 60",
+          "legendFormat": "Failed / min"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" } }
+    }
+  ]
+}

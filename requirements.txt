@@ -5,6 +5,7 @@ python-dotenv==1.0.0
 debugpy==1.8.0
 redis==5.0.1
 celery==5.3.6
+django-prometheus==2.3.1
 
 # Testing dependencies
 pytest==7.4.3
