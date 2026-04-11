@@ -2,7 +2,7 @@
 Tests for InternalFeedback DTO and FeedbackAdapter
 """
 import pytest
-from retailops.dto import InternalFeedback, FeedbackAdapter
+from retailops.intake.dto import InternalFeedback, FeedbackAdapter
 
 
 class TestInternalFeedback:

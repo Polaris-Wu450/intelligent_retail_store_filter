@@ -21,6 +21,7 @@ db.sqlite3-journal
 # Environment
 .env
 .env.local
+*.bak
 
 # IDE
 .vscode/
@@ -44,4 +45,15 @@ Thumbs.db
 
 # Docker
 *.pid
+
+# Frontend build output
+static/dist/
+frontend/dist/
+
+# Infra / Terraform (for future AWS setup)
+infra/**/.terraform/
+infra/**/*.tfstate
+infra/**/*.tfstate.backup
+infra/**/*.tfvars
+!infra/**/*.tfvars.example
 

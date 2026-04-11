@@ -7,15 +7,35 @@ help:  ## Show this help message
 	@echo "Available commands:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-test: test-docker  ## Run all tests in Docker (default)
+test: test-local  ## Run all tests locally (default)
 
-test-docker:  ## Run tests in Docker containers
+test-docker:  ## Run tests inside Docker
 	@echo "Running tests in Docker..."
-	./run_tests.sh
+	docker-compose -f docker-compose.test.yml run --rm web pytest -v
 
 test-local:  ## Run tests locally
 	@echo "Running tests locally..."
-	./run_tests_local.sh
+	pytest -v
+
+up:  ## Start all services (Docker)
+	docker-compose up -d
+
+down:  ## Stop all services
+	docker-compose down
+
+start:  ## Start services and run migrations
+	@echo "Starting services..."
+	docker-compose up -d
+	@echo "Waiting for DB..."
+	@sleep 5
+	docker-compose exec web python manage.py migrate
+	@echo "Ready at http://localhost:8000"
+
+migrate:  ## Run database migrations
+	docker-compose exec web python manage.py migrate
+
+seed:  ## Seed demo data
+	docker-compose exec web python manage.py setup_demo_data
 
 test-unit:  ## Run only unit tests
 	@echo "Running unit tests..."
